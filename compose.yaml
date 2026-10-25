@@ -1,6 +1,7 @@
 services:
   online-md:
-    image: ghcr.io/nyakooo/oh-my-online-md:latest
+    build: .
+    image: ghcr.io/nyakooo/oh-my-online-md:${IMAGE_TAG:-latest}
     container_name: online-md
     restart: unless-stopped
     ports:

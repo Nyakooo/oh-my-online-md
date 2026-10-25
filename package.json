@@ -1,0 +1,26 @@
+{
+  "name": "oh-my-online-md-editor",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-editor.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.10.0",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.11.0",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.38.0",
+    "@lezer/markdown": "^1.4.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-task-lists": "^2.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playwright": "1.62.1"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "license": "MIT"
+}

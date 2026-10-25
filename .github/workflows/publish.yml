@@ -1,18 +1,52 @@
-name: Publish container image
+name: Build and release
 
 on:
   push:
     branches: [main, master]
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  publish:
+  verify:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify bundled editor
+        run: |
+          pnpm build
+          git diff --exit-code -- web/editor.bundle.js web/editor.LICENSE.txt
+      - name: Test Go application
+        run: |
+          go test -race ./...
+          go vet ./...
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test browser flows
+        run: bash scripts/test-browser.sh
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -24,13 +58,53 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/nyakooo/oh-my-online-md
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
+            type=semver,pattern={{version}}
       - uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Package Linux binaries
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags='-s -w' -o online-md .
+            tar -czf "dist/online-md_${RELEASE_TAG}_linux_${arch}.tar.gz" online-md LICENSE THIRD_PARTY_NOTICES.md web/editor.LICENSE.txt
+          done
+          rm online-md
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --title "$RELEASE_TAG · 简记" \
+            --notes-file "docs/releases/${RELEASE_TAG}.md" \
+            dist/*.tar.gz dist/SHA256SUMS \
+            compose.yaml deploy/nginx.conf docs/images/promo.png

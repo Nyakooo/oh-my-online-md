@@ -1,33 +1,46 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/text"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
-//go:embed web/index.html
+//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html
 var webFiles embed.FS
 
-type app struct{ dataDir, password string }
+type app struct {
+	dataDir, password string
+	writeMu           sync.Mutex
+}
 type note struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	DirName   string    `json:"-"`
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	Content        string    `json:"content"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	DirName        string    `json:"-"`
+	CleanupWarning string    `json:"cleanupWarning,omitempty"`
 }
 type noteSummary struct {
 	ID        string    `json:"id"`
@@ -46,17 +59,37 @@ func main() {
 		log.Fatalf("create data directory: %v", err)
 	}
 	a := &app{dataDir: dataDir, password: os.Getenv("PASSWORD")}
+	port := env("PORT", "10777")
+	server := &http.Server{Addr: ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
+	log.Printf("online-md listening on :%s (data: %s)", port, dataDir)
+	log.Fatal(server.ListenAndServe())
+}
+func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/preview", a.preview)
+	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)
+	mux.HandleFunc("GET /api/notes/{id}/assets/{name}", a.getImage)
 	mux.HandleFunc("GET /api/notes", a.listNotes)
 	mux.HandleFunc("POST /api/notes", a.createNote)
 	mux.HandleFunc("GET /api/notes/{id}", a.getNote)
 	mux.HandleFunc("PUT /api/notes/{id}", a.updateNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.deleteNote)
+	mux.HandleFunc("GET /editor.bundle.js", a.serveEditor)
+	mux.HandleFunc("GET /editor.LICENSE.txt", a.serveEditorLicense)
 	mux.HandleFunc("GET /", a.serveIndex)
-	port := env("PORT", "10777")
-	server := &http.Server{Addr: ":" + port, Handler: a.auth(mux), ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("online-md listening on :%s (data: %s)", port, dataDir)
-	log.Fatal(server.ListenAndServe())
+
+	mux.HandleFunc("GET /api/notes/{id}/share", a.getShare)
+	mux.HandleFunc("POST /api/notes/{id}/share", a.createShare)
+	mux.HandleFunc("DELETE /api/notes/{id}/share", a.deleteShare)
+	// Public links are isolated from the authenticated editor and note APIs.
+	public := http.NewServeMux()
+	public.HandleFunc("GET /s/{token}/{$}", a.serveShare)
+	public.HandleFunc("GET /s/{token}/assets/{name}", a.serveShareImage)
+	public.HandleFunc("GET /s/{token}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/s/"+url.PathEscape(r.PathValue("token"))+"/", http.StatusTemporaryRedirect)
+	})
+	public.Handle("/", a.auth(mux))
+	return public
 }
 func env(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
@@ -99,6 +132,8 @@ func (a *app) listNotes(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, items)
 }
 func (a *app) createNote(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	var input struct {
 		Title   string `json:"title"`
 		Content string `json:"content"`
@@ -151,19 +186,23 @@ func (a *app) getNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, item)
 }
 func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	item, err := a.readNote(r.PathValue("id"))
 	if err != nil {
 		writeError(w, 404, "note not found")
 		return
 	}
 	var input struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Title          string   `json:"title"`
+		Content        string   `json:"content"`
+		UploadedAssets []string `json:"uploadedAssets"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&input); err != nil {
 		writeError(w, 400, "invalid note data")
 		return
 	}
+	previousContent := item.Content
 	item.Title = normalizeTitle(input.Title)
 	if utf8.RuneCountInString(item.Title) > 200 {
 		writeError(w, 400, "title is too long")
@@ -175,9 +214,15 @@ func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "cannot save note")
 		return
 	}
+	if err := a.removeDeletedImages(item, previousContent, input.UploadedAssets); err != nil {
+		log.Printf("clean deleted images for note %s: %v", item.ID, err)
+		item.CleanupWarning = "笔记已保存，但部分图片文件清理失败，请检查服务器目录权限"
+	}
 	writeJSON(w, 200, item)
 }
 func (a *app) deleteNote(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	item, err := a.readNote(r.PathValue("id"))
 	if err != nil {
 		writeError(w, 404, "note not found")
@@ -234,14 +279,14 @@ func (a *app) writeNote(item note) error {
 		return errors.New("invalid directory")
 	}
 	dir := filepath.Join(a.dataDir, item.DirName)
-	if err := os.WriteFile(filepath.Join(dir, "note.md"), []byte(item.Content), 0644); err != nil {
-		return err
-	}
 	data, err := json.Marshal(noteMetadata{item.ID, item.Title, item.UpdatedAt})
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "meta.json"), data, 0644)
+	if err := atomicWrite(filepath.Join(dir, "meta.json"), data); err != nil {
+		return err
+	}
+	return atomicWrite(filepath.Join(dir, "note.md"), []byte(item.Content))
 }
 func normalizeTitle(title string) string {
 	title = strings.TrimSpace(title)
@@ -309,4 +354,180 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+var markdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
+
+func (a *app) preview(w http.ResponseWriter, r *http.Request) {
+	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 2<<20))
+	if err != nil {
+		writeError(w, 413, "note is too large")
+		return
+	}
+	var output bytes.Buffer
+	if err := markdown.Convert(source, &output); err != nil {
+		writeError(w, 500, "cannot render Markdown")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(output.Bytes())
+}
+func (a *app) uploadImage(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	item, err := a.readNote(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 404, "note not found")
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 10<<20))
+	if err != nil {
+		writeError(w, 413, "image exceeds 10 MiB")
+		return
+	}
+	ext := map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}[http.DetectContentType(data)]
+	if ext == "" {
+		writeError(w, 415, "supported images: PNG, JPEG, GIF, WebP")
+		return
+	}
+	id, err := newID()
+	if err != nil {
+		writeError(w, 500, "cannot create image")
+		return
+	}
+	dir := filepath.Join(a.dataDir, item.DirName, "assets")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		writeError(w, 500, "cannot create image directory")
+		return
+	}
+	name := id + ext
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0644); err != nil {
+		writeError(w, 500, "cannot save image")
+		return
+	}
+	writeJSON(w, 201, map[string]string{"path": "assets/" + name})
+}
+func (a *app) getImage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	ext := filepath.Ext(name)
+	mime := imageTypes[ext]
+	if mime == "" || !validID(strings.TrimSuffix(name, ext)) {
+		http.NotFound(w, r)
+		return
+	}
+	item, err := a.readNote(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeFile(w, r, filepath.Join(a.dataDir, item.DirName, "assets", name))
+}
+
+// Replace a file only after all bytes have been written successfully.
+func atomicWrite(filename string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(filename), ".note-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err = file.Chmod(0644); err == nil {
+		_, err = file.Write(data)
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(file.Name(), filename)
+}
+
+func imageReferences(item note, content string) map[string]bool {
+	refs := make(map[string]bool)
+	root := markdown.Parser().Parse(text.NewReader([]byte(content)))
+	_ = ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		var destination []byte
+		switch node := node.(type) {
+		case *ast.Image:
+			destination = node.Destination
+		case *ast.Link:
+			destination = node.Destination
+		default:
+			return ast.WalkContinue, nil
+		}
+		parsed, err := url.Parse(string(destination))
+		if err != nil {
+			return ast.WalkContinue, nil
+		}
+		target := path.Clean(parsed.Path)
+		name := ""
+		if strings.HasPrefix(target, "assets/") && parsed.Host == "" {
+			name = strings.TrimPrefix(target, "assets/")
+		}
+		if strings.HasPrefix(target, "/api/notes/"+item.ID+"/assets/") {
+			name = strings.TrimPrefix(target, "/api/notes/"+item.ID+"/assets/")
+		}
+		ext := path.Ext(name)
+		if validID(strings.TrimSuffix(name, ext)) && imageTypes[ext] != "" {
+			refs[name] = true
+		}
+		return ast.WalkContinue, nil
+	})
+	return refs
+}
+
+// Compare saved revisions so another in-flight save's new uploads are not removed.
+// Only application-managed images removed from the saved Markdown are deleted.
+func (a *app) removeDeletedImages(item note, previousContent string, uploadedAssets []string) error {
+	previous := imageReferences(item, previousContent)
+	// Include this save's uploads so a retry can discard an image uploaded by an
+	// earlier failed attempt, without touching another editor's in-flight files.
+	for _, asset := range uploadedAssets {
+		name := strings.TrimPrefix(asset, "assets/")
+		ext := path.Ext(name)
+		if validID(strings.TrimSuffix(name, ext)) && imageTypes[ext] != "" {
+			previous[name] = true
+		}
+	}
+	current := imageReferences(item, item.Content)
+	var failures []error
+	for name := range previous {
+		if current[name] {
+			continue
+		}
+		err := os.Remove(filepath.Join(a.dataDir, item.DirName, "assets", name))
+		if err != nil && !os.IsNotExist(err) {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+
+func (a *app) serveEditor(w http.ResponseWriter, r *http.Request) {
+	content, err := webFiles.ReadFile("web/editor.bundle.js")
+	if err != nil {
+		http.Error(w, "editor unavailable", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(content)
+}
+
+func (a *app) serveEditorLicense(w http.ResponseWriter, r *http.Request) {
+	content, err := webFiles.ReadFile("web/editor.LICENSE.txt")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write(content)
 }

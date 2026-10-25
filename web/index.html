@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>简记 · Markdown</title>
+  <script>
+    try {
+      const theme = localStorage.getItem('theme');
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch {}
+  </script>
   <style>
     :root {
       color-scheme: light;
@@ -21,50 +27,59 @@
       --accent-soft: #fff5d5;
       --accent-text: #55481e;
       --danger: #b34237;
+      --plus-ink: #51441b;
+      --mark: #30312e;
     }
     html[data-theme="dark"] {
       color-scheme: dark;
-      --page: #171816;
-      --sidebar: #1e1f1c;
-      --paper: #242522;
-      --text: #efefe9;
-      --body-text: #cccdc5;
-      --muted: #999b92;
-      --line: #363732;
-      --hover: #30312d;
-      --accent: #d7b64c;
-      --accent-soft: #3c351f;
-      --accent-text: #f0d982;
-      --danger: #e08c81;
+      --page: #111111;
+      --sidebar: #151515;
+      --paper: #1b1b1b;
+      --text: #eeeeee;
+      --body-text: #c8c8c8;
+      --muted: #909090;
+      --line: #303030;
+      --hover: #262626;
+      --accent: #c8c8c8;
+      --accent-soft: #2c2c2c;
+      --accent-text: #e2e2e2;
+      --danger: #dddddd;
+      --plus-ink: #181818;
+      --mark: #303030;
     }
     @media (prefers-color-scheme: dark) {
       html:not([data-theme]) {
         color-scheme: dark;
-        --page: #171816;
-        --sidebar: #1e1f1c;
-        --paper: #242522;
-        --text: #efefe9;
-        --body-text: #cccdc5;
-        --muted: #999b92;
-        --line: #363732;
-        --hover: #30312d;
-        --accent: #d7b64c;
-        --accent-soft: #3c351f;
-        --accent-text: #f0d982;
-        --danger: #e08c81;
+        --page: #111111;
+        --sidebar: #151515;
+        --paper: #1b1b1b;
+        --text: #eeeeee;
+        --body-text: #c8c8c8;
+        --muted: #909090;
+        --line: #303030;
+        --hover: #262626;
+        --accent: #c8c8c8;
+        --accent-soft: #2c2c2c;
+        --accent-text: #e2e2e2;
+        --danger: #dddddd;
+        --plus-ink: #181818;
+        --mark: #303030;
       }
     }
     * { box-sizing: border-box; }
     body { min-width: 320px; min-height: 100vh; margin: 0; color: var(--text); background: var(--page); }
     button, input, textarea { font: inherit; }
     button { cursor: pointer; }
+    button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    ::selection { background: var(--accent-soft); color: var(--text); }
+    input[type="checkbox"] { accent-color: var(--accent); }
     .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: min(100%, 1680px); height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
     aside { display: flex; min-width: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
     .brand { display: flex; align-items: center; gap: 10px; padding: 0 9px; color: var(--text); font-size: 16px; font-weight: 650; letter-spacing: -.035em; }
-    .mark { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 9px; background: #30312e; color: #fff; font-size: 13px; font-weight: 650; }
+    .mark { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 9px; background: var(--mark); color: #fff; font-size: 13px; font-weight: 650; }
     .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
     .new-note:hover { filter: brightness(.97); }
-    .plus { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--accent); color: #51441b; font-size: 16px; line-height: 1; }
+    .plus { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--plus-ink); font-size: 16px; line-height: 1; }
     .section-label { margin: 0 9px 10px; color: var(--muted); font-size: 12px; font-weight: 550; }
     .note-list { display: flex; min-height: 0; flex-direction: column; gap: 3px; overflow-y: auto; }
     .note-item { display: flex; width: 100%; flex-direction: column; gap: 4px; border: 0; border-radius: 9px; padding: 10px 11px; color: var(--body-text); background: transparent; text-align: left; }
@@ -77,27 +92,70 @@
     .topbar { display: flex; min-height: 60px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 25px; border-bottom: 1px solid var(--line); }
     .crumb { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
     .actions { display: flex; flex: none; align-items: center; gap: 10px; }
-    .save-state { color: var(--muted); font-size: 11px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .save-button[data-state="saved"] { color: var(--body-text); }
+    .save-button[data-state="error"] { color: var(--danger); }
+    .save-spinner { display: inline-block; width: 13px; height: 13px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .save-spinner { animation: none; } }
+    .notice { position: fixed; z-index: 20; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: min(90vw, 540px); padding: 10px 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; color: var(--danger); font-size: 13px; box-shadow: 0 5px 24px #0002; }
+    .note-menu { position: fixed; z-index: 10; min-width: 130px; padding: 5px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #0002; }
+    .note-menu button { display: block; width: 100%; border: 0; padding: 8px 12px; text-align: left; font: inherit; font-size: 13px; color: var(--body-text); background: transparent; border-radius: 5px; }
+    .note-menu button:hover { background: var(--hover); }
+    .note-menu #delete-note { color: var(--danger); }
     .save-button { min-width: 54px; border: 0; border-radius: 7px; padding: 7px 12px; color: var(--accent-text); background: var(--accent-soft); font-size: 12px; font-weight: 550; }
     .save-button:hover { filter: brightness(.97); }
     .icon-button { display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 16px; }
-    .icon-button:hover { color: var(--danger); background: var(--hover); }
+    .icon-button:hover { color: var(--text); background: var(--hover); }
+    #theme-toggle, #share-note { width: 36px; height: 36px; }
+    #theme-toggle svg, #share-note svg { width: 17px; height: 17px; }
+    #theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .icon-button:disabled { opacity: .4; cursor: default; }
     .icon-button:disabled:hover { color: var(--muted); background: transparent; }
     .editor-pane { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 50px clamp(24px, 9vw, 140px) 38px; }
     .title-input { display: block; width: 100%; margin: 0 0 20px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: clamp(26px, 3.2vw, 35px); font-weight: 650; letter-spacing: -.045em; }
     .title-input::placeholder { color: var(--muted); opacity: .65; }
-    textarea { display: block; width: 100%; min-height: calc(100dvh - 170px); resize: none; border: 0; outline: 0; padding: 0; color: var(--body-text); background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.95; tab-size: 2; }
-    textarea::placeholder { color: var(--muted); opacity: .68; }
+    [hidden] { display: none !important; }
+    #content { min-height: 55vh; }
+    .rendered-block { cursor: text; padding: 2px 0; white-space: normal; }
+    .rendered-block > :first-child { margin-top: 0; }
+    .rendered-block > :last-child { margin-bottom: 0; }
+    .markdown { min-width: 0; overflow-wrap: anywhere; color: var(--body-text); font-size: 15px; line-height: 1.8; }
+    .markdown > :first-child { margin-top: 0; }
+    .markdown h1, .markdown h2, .markdown h3, .markdown h4 { color: var(--text); line-height: 1.4; }
+    .markdown h1 { font-size: 2em; } .markdown h2 { font-size: 1.5em; }
+    .markdown img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+    .markdown pre { white-space: pre; padding: 14px; overflow: auto; background: var(--hover); border-radius: 6px; }
+    .markdown code { background: var(--hover); border-radius: 3px; padding: 2px 4px; font-size: .9em; }
+    .markdown pre code { padding: 0; }
+    .markdown blockquote { margin-left: 0; padding-left: 16px; border-left: 3px solid var(--accent); color: var(--muted); }
+    .markdown table { display: block; overflow: auto; border-collapse: collapse; }
+    .markdown th, .markdown td { border: 1px solid var(--line); padding: 6px 12px; }
+    .markdown a { color: var(--accent-text); text-decoration: underline; }
+    .markdown hr { border: 0; border-top: 1px solid var(--line); }
     .mobile-menu { display: none; }
+
+
     .unsaved-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 13px; padding: 22px; color: var(--text); background: var(--paper); box-shadow: 0 20px 80px #0002; }
-    .unsaved-dialog::backdrop { background: #20211f66; }
+    .unsaved-dialog::backdrop { background: #20202066; }
     .unsaved-dialog h2 { margin: 0 0 8px; font-size: 17px; }
     .unsaved-dialog p { margin: 0 0 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
     .dialog-actions button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--body-text); background: var(--paper); font-size: 12px; }
     .dialog-actions .primary { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
     .dialog-actions .discard { color: var(--danger); }
+    .share-dialog { width: min(420px, calc(100vw - 32px)); }
+    .share-dialog header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .share-dialog header h2 { margin: 0; }
+    .share-dialog .icon-button { font-size: 20px; }
+    .share-field { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 20px 0; color: var(--body-text); font-size: 13px; }
+    .share-field select { font: inherit; padding: 7px 30px 7px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--paper); }
+    .share-link-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .share-link-row input { min-width: 0; flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 8px; color: var(--body-text); background: var(--paper); font-size: 12px; }
+    .share-link-row button { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; color: var(--text); background: var(--paper); white-space: nowrap; font-size: 12px; }
+    .share-dialog #share-expiry { margin: 0 0 20px; font-size: 12px; }
+    .share-dialog #share-error { color: var(--danger); margin-bottom: 16px; }
+    .share-dialog button:disabled { opacity: .5; cursor: default; }
     @media (max-width: 760px) {
       .app { display: block; min-height: 0; }
       aside { display: none; }
@@ -108,9 +166,9 @@
       .crumb { display: none; }
       .actions { gap: 7px; }
       .editor-pane { padding: 34px 24px 50px; }
-      textarea { min-height: calc(100dvh - 160px); }
+
     }
-    @media (max-width: 390px) { .save-state { display: none; } .editor-pane { padding-right: 18px; padding-left: 18px; } }
+    @media (max-width: 390px) { .editor-pane { padding-right: 18px; padding-left: 18px; } }
   </style>
 </head>
 <body>
@@ -127,18 +185,30 @@
         <button class="icon-button mobile-menu" id="mobile-menu" aria-label="笔记列表">☰</button>
         <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
         <div class="actions">
-          <span class="save-state" id="save-state">未保存</span>
-          <button class="icon-button" id="theme-toggle" aria-label="切换主题" title="切换主题">☾</button>
-          <button class="save-button" id="save-note" title="Ctrl+S / ⌘S 保存">保存</button>
-          <button class="icon-button" id="delete-note" title="删除笔记" aria-label="删除笔记" disabled><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button>
+          <button class="icon-button" id="share-note" type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
+          <button class="icon-button" id="theme-toggle" type="button" aria-label="切换到黑夜模式" title="切换到黑夜模式"></button>
+          <span class="sr-only" id="save-state" role="status" aria-live="polite">未保存</span>
+          <button class="save-button" id="save-note" aria-label="保存" title="Ctrl+S / ⌘S 保存">保存</button>
         </div>
       </header>
       <section class="editor-pane">
         <input class="title-input" id="title" placeholder="笔记标题" maxlength="200" aria-label="笔记标题">
-        <textarea id="content" placeholder="# 开始记录…&#10;&#10;直接编辑 Markdown。按 Ctrl+S 保存。" spellcheck="false"></textarea>
+        <div id="content"></div>
       </section>
     </main>
   </div>
+  <div class="note-menu" id="note-menu" role="menu" hidden>
+    <button id="delete-note" role="menuitem" disabled>删除笔记</button>
+  </div>
+  <dialog class="unsaved-dialog share-dialog" id="share-dialog" aria-labelledby="share-heading">
+    <header><h2 id="share-heading">分享笔记</h2><button class="icon-button" id="close-share" type="button" aria-label="关闭分享">×</button></header>
+    <p>持有链接的人可只读查看分享时的内容。</p>
+    <label class="share-field" for="share-days">有效期<select id="share-days"><option value="1">1 天</option><option value="2">2 天</option><option value="3">3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option></select></label>
+    <div id="share-result" hidden><div class="share-link-row"><input id="share-link" aria-label="分享链接" readonly><button id="copy-share" type="button">复制链接</button></div><p id="share-expiry"></p></div>
+    <p id="share-error" role="alert" hidden></p>
+    <div class="dialog-actions"><button class="discard" id="revoke-share" type="button" hidden>取消分享</button><button class="primary" id="create-share" type="button">生成链接</button></div>
+  </dialog>
+  <div class="notice" id="notice" role="alert" hidden></div>
   <dialog class="unsaved-dialog" id="unsaved-dialog">
     <h2>有未保存的修改</h2>
     <p>保存后继续，或放弃这些修改。</p>
@@ -148,18 +218,51 @@
       <button class="primary" id="save-and-continue">保存并继续</button>
     </div>
   </dialog>
+  <script src="/editor.bundle.js"></script>
   <script>
 const $ = (selector) => document.querySelector(selector);
-const state = { notes: [], current: null, saving: false, dirty: false };
+const state = { notes: [], current: null, saving: false, dirty: false, saved: { title: '', content: '' } };
+const pendingImages = new Map();
+function clearPendingImages() {
+  for (const image of pendingImages.values()) URL.revokeObjectURL(image.url);
+  pendingImages.clear();
+
+}
 const escapeHTML = (value) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
-  if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = await response.text();
+    if (response.status === 413) throw new Error('请求超过上传限制，请检查图片大小及反向代理的 10m 配置');
+    let detail;
+    try { detail = JSON.parse(message).error; } catch {}
+    throw new Error(detail || `请求失败（HTTP ${response.status}）`);
+  }
   return response.status === 204 ? null : response.json();
 }
-function setSavedState(text) { $('#save-state').textContent = text; }
-function markDirty() { state.dirty = true; setSavedState('未保存'); }
+let noticeTimer;
+function showNotice(message) {
+  clearTimeout(noticeTimer);
+  $('#notice').textContent = message;
+  $('#notice').hidden = false;
+  noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, 6000);
+}
+function setSavedState(text) {
+  $('#save-state').textContent = text;
+  const button = $('#save-note');
+  button.dataset.state = text === '保存中…' ? 'saving' : text === '保存失败' || text === '连接失败' ? 'error' : text === '已保存' ? 'saved' : 'idle';
+  button.setAttribute('aria-label', button.dataset.state === 'idle' ? '保存' : text);
+  if (button.dataset.state === 'saving' || button.dataset.state === 'saved') { clearTimeout(noticeTimer); $('#notice').hidden = true; }
+  if (button.dataset.state === 'saving') button.innerHTML = '<span class="save-spinner" aria-hidden="true"></span>';
+  else button.textContent = button.dataset.state === 'saved' ? '✓' : button.dataset.state === 'error' ? '!' : '保存';
+  button.disabled = state.saving || Boolean(state.current && !state.dirty);
+}
+function markDirty() {
+  state.dirty = $('#title').value !== state.saved.title || contentEditor.getValue() !== state.saved.content;
+  setSavedState(state.dirty ? '未保存' : state.current ? '已保存' : '草稿');
+}
+
 async function refreshNotes() {
   state.notes = await api('/api/notes');
   const list = $('#note-list');
@@ -171,6 +274,15 @@ async function refreshNotes() {
     button.className = `note-item${note.id === state.current ? ' active' : ''}`;
     button.innerHTML = `<span class="note-name">${escapeHTML(note.title || '未命名便签')}</span><span class="note-date">${date}</span>`;
     button.addEventListener('click', () => openNote(note.id));
+    button.addEventListener('contextmenu', async event => {
+      event.preventDefault();
+      await openNote(note.id);
+      if (state.current !== note.id) return;
+      const menu = $('#note-menu');
+      menu.style.left = `${Math.min(event.clientX, innerWidth - 150)}px`;
+      menu.style.top = `${Math.min(event.clientY, innerHeight - 100)}px`;
+      menu.hidden = false;
+    });
     list.append(button);
   }
 }
@@ -181,10 +293,12 @@ function askUnsaved() {
     $('#save-and-continue').onclick = () => finish('save');
     $('#discard-changes').onclick = () => finish('discard');
     $('#cancel-navigation').onclick = () => finish('cancel');
+    dialog.oncancel = event => { event.preventDefault(); finish('cancel'); };
     dialog.showModal();
   });
 }
 async function allowLeave() {
+  if (state.saving) return false;
   if (!state.dirty) return true;
   const choice = await askUnsaved();
   if (choice === 'save') return saveNote();
@@ -195,10 +309,12 @@ async function openNote(id) {
   if (id === state.current) { $('#sidebar').classList.remove('open'); return; }
   if (!await allowLeave()) return;
   const note = await api(`/api/notes/${id}`);
+  clearPendingImages();
   state.current = id;
   $('#delete-note').disabled = false;
   $('#title').value = note.title;
-  $('#content').value = note.content;
+  contentEditor.setValue(note.content, true);
+  state.saved = { title: note.title, content: note.content };
   $('#crumb-title').textContent = note.title;
   state.dirty = false;
   setSavedState('已保存');
@@ -207,47 +323,83 @@ async function openNote(id) {
 }
 async function createNote() {
   if (!await allowLeave()) return;
+  clearPendingImages();
   state.current = null;
   state.dirty = false;
   $('#delete-note').disabled = true;
   await refreshNotes();
   $('#title').value = '';
-  $('#content').value = '';
+  contentEditor.setValue('', true);
+  state.saved = { title: '', content: '' };
   $('#crumb-title').textContent = '新便签';
   setSavedState('草稿');
   $('#sidebar').classList.remove('open');
   $('#title').focus();
 }
 async function saveNote() {
-  if (state.saving || (state.current && !state.dirty)) return !state.dirty;
+  if (state.saving) return false;
+  if (state.current && !state.dirty) { setSavedState('已保存'); return true; }
   state.saving = true;
+  // Keep a fixed revision while uploading so navigation and edits cannot race
+  // the server's cleanup of removed references.
+  contentEditor.blur();
+  contentEditor.setEditable(false);
+  const controls = ['#title', '#save-note', '#share-note'];
+  controls.forEach(selector => { $(selector).disabled = true; });
   const title = $('#title').value;
-  const content = $('#content').value;
+  let content = contentEditor.getValue();
   setSavedState('保存中…');
   try {
-    const options = { method: state.current ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content }) };
+    const images = [...pendingImages].filter(([path]) => content.includes(path));
+    if (images.length && !state.current) {
+      const draft = await api('/api/notes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content: '' })
+      });
+      state.current = draft.id;
+    }
+    for (const [path, image] of images) {
+      if (!image.uploadedPath) {
+        const result = await api(`/api/notes/${state.current}/assets`, { method: 'POST', body: image.file });
+        // Reuse completed uploads if the note save fails and the user retries.
+        image.uploadedPath = result.path;
+      }
+      content = content.replaceAll(path, image.uploadedPath);
+    }
+    const uploadedAssets = [...pendingImages.values()].map(image => image.uploadedPath).filter(Boolean);
+    const options = { method: state.current ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, uploadedAssets }) };
     const url = state.current ? `/api/notes/${state.current}` : '/api/notes';
     const saved = await api(url, options);
     state.current = saved.id;
     $('#delete-note').disabled = false;
-    const titleChangedDuringSave = $('#title').value !== title;
-    if (!titleChangedDuringSave) $('#title').value = saved.title;
-    state.dirty = titleChangedDuringSave || content !== $('#content').value;
-    $('#crumb-title').textContent = $('#title').value;
-    setSavedState(state.dirty ? '未保存' : '已保存');
-    await refreshNotes();
-    return !state.dirty;
+    $('#title').value = saved.title;
+    contentEditor.setValue(saved.content);
+    state.saved = { title: saved.title, content: saved.content };
+    state.dirty = false;
+    contentEditor.refreshImages();
+    $('#crumb-title').textContent = saved.title;
+    setSavedState('已保存');
+    if (saved.cleanupWarning) showNotice(saved.cleanupWarning);
+    // A sidebar refresh failure must not misreport a successful note save.
+    try { await refreshNotes(); } catch { showNotice('笔记已保存，列表刷新失败，请刷新页面'); }
+    return true;
   } catch (error) {
+    state.dirty = true;
     setSavedState('保存失败');
-    console.error(error);
+    showNotice(error.message);
     return false;
-  } finally { state.saving = false; }
+  } finally {
+    state.saving = false;
+    contentEditor.setEditable(true);
+    controls.forEach(selector => { $(selector).disabled = false; });
+    $('#save-note').disabled = Boolean(state.current && !state.dirty);
+  }
 }
 async function deleteNote() {
-  if (!state.current) return;
+  if (!state.current || state.saving) return;
   const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
   if (!confirm(message)) return;
   await api(`/api/notes/${state.current}`, { method: 'DELETE' });
+  clearPendingImages();
   state.current = null;
   state.dirty = false;
   $('#delete-note').disabled = true;
@@ -270,10 +422,121 @@ function isDarkTheme() {
 }
 function updateThemeButton() {
   const dark = isDarkTheme();
-  $('#theme-toggle').textContent = dark ? '☀' : '☾';
-  $('#theme-toggle').title = dark ? '切换到白天主题' : '切换到黑夜主题';
+  const icon = dark
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>'
+    : '<path d="M20.5 13.3A8.5 8.5 0 0 1 10.7 3.5a8.5 8.5 0 1 0 9.8 9.8Z"/>';
+  $('#theme-toggle').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>`;
+  $('#theme-toggle').title = dark ? '切换到白天模式' : '切换到黑夜模式';
   $('#theme-toggle').setAttribute('aria-label', $('#theme-toggle').title);
 }
+function resolveImage(path) {
+  if (pendingImages.has(path)) return pendingImages.get(path).url;
+  if (state.current && /^assets\/[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(path)) return `/api/notes/${state.current}/${path}`;
+  return path;
+}
+const contentEditor = createNoteEditor($('#content'), {
+  onChange: markDirty,
+  resolveImage,
+  onPaste(event) {
+    const images = Array.from(event.clipboardData?.items || []).filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+    if (!images.length) return false;
+    event.preventDefault();
+    insertImages(images);
+    return true;
+  }
+});
+function insertImages(files) {
+  if (!files.length || state.saving) return;
+  try {
+    for (const file of files) {
+      if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type)) throw new Error('仅支持 PNG、JPEG、GIF、WebP 图片');
+      if (file.size > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MiB');
+    }
+    for (const file of files) {
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+      const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[file.type];
+      const path = `assets/pending/${id}.${ext}`;
+      pendingImages.set(path, { file, url: URL.createObjectURL(file) });
+      contentEditor.insertText(`\n![图片](${path})\n`);
+    }
+    markDirty();
+    contentEditor.refreshImages();
+  } catch (error) { showNotice(error.message); }
+}
+let activeShare = null;
+let shareBusy = false;
+function renderShare(record) {
+  activeShare = record;
+  $('#share-result').hidden = !record;
+  $('#revoke-share').hidden = !record;
+  $('#create-share').textContent = state.dirty || !state.current ? '保存并生成链接' : record ? '重新生成链接' : '生成链接';
+  if (record) {
+    $('#share-link').value = new URL(record.path, location.origin).href;
+    $('#share-expiry').textContent = `${new Date(record.expiresAt).toLocaleString('zh-CN', { hour12: false })} 到期`;
+    $('#share-days').value = record.days;
+  }
+}
+function shareError(message) {
+  $('#share-error').textContent = message;
+  $('#share-error').hidden = !message;
+}
+function setShareBusy(busy) {
+  shareBusy = busy;
+  for (const id of ['#create-share', '#revoke-share', '#share-days', '#close-share', '#copy-share']) $(id).disabled = busy;
+}
+async function openShare() {
+  if (state.saving || shareBusy) return;
+  contentEditor.blur();
+  shareError('');
+  $('#copy-share').textContent = '复制链接';
+  $('#share-days').value = '1';
+  renderShare(null);
+  $('#share-dialog').showModal();
+  setShareBusy(true);
+  try {
+    if (state.current) renderShare(await api(`/api/notes/${state.current}/share`));
+  } catch (error) { shareError(error.message); }
+  finally { setShareBusy(false); }
+}
+$('#share-note').addEventListener('click', openShare);
+$('#close-share').addEventListener('click', () => $('#share-dialog').close());
+$('#share-dialog').addEventListener('cancel', event => { if (shareBusy) event.preventDefault(); });
+$('#create-share').addEventListener('click', async () => {
+  if (shareBusy) return;
+  const days = Number($('#share-days').value);
+  setShareBusy(true);
+  shareError('');
+  $('#create-share').textContent = '生成中…';
+  try {
+    // This action is explicitly labelled "save and generate" for unsaved edits.
+    if ((state.dirty || !state.current) && !await saveNote()) throw new Error('笔记保存失败，请重试后再分享');
+    renderShare(await api(`/api/notes/${state.current}/share`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }) }));
+    $('#copy-share').textContent = '复制链接';
+  } catch (error) { shareError(error.message); renderShare(activeShare); }
+  finally { setShareBusy(false); }
+});
+$('#copy-share').addEventListener('click', async () => {
+  const input = $('#share-link');
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+    await navigator.clipboard.writeText(input.value);
+    $('#copy-share').textContent = '已复制';
+  } catch {
+    input.focus(); input.select(); input.setSelectionRange(0, input.value.length);
+    // Plain HTTP on a LAN may not expose the Clipboard API.
+    if (document.execCommand('copy')) $('#copy-share').textContent = '已复制';
+    else shareError('链接已选中，请长按或使用复制快捷键');
+  }
+});
+$('#revoke-share').addEventListener('click', async () => {
+  if (shareBusy || !state.current) return;
+  setShareBusy(true); shareError('');
+  try {
+    await api(`/api/notes/${state.current}/share`, { method: 'DELETE' });
+    renderShare(null);
+  } catch (error) { shareError(error.message); }
+  finally { setShareBusy(false); }
+});
 $('#theme-toggle').addEventListener('click', () => {
   const next = isDarkTheme() ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
@@ -282,22 +545,24 @@ $('#theme-toggle').addEventListener('click', () => {
 });
 $('#new-note').addEventListener('click', createNote);
 $('#title').addEventListener('input', markDirty);
-$('#content').addEventListener('input', markDirty);
 $('#save-note').addEventListener('click', saveNote);
 $('#delete-note').addEventListener('click', deleteNote);
+document.addEventListener('click', event => { if (!event.target.closest('#note-menu')) $('#note-menu').hidden = true; });
+$('#note-menu').addEventListener('click', () => { $('#note-menu').hidden = true; });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#note-menu').hidden = true; });
 $('#mobile-menu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 $('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') $('#sidebar').classList.remove('open'); });
 document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveNote(); }
 });
-window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', (event) => { if (state.dirty || state.saving) { event.preventDefault(); event.returnValue = ''; } });
 (async function init() {
   initTheme();
   try {
     await refreshNotes();
     if (state.notes.length) await openNote(state.notes[0].id);
-    else { $('#title').value = ''; $('#content').value = ''; setSavedState('草稿'); }
-  } catch (error) { setSavedState('连接失败'); console.error(error); }
+    else { $('#title').value = ''; contentEditor.setValue('', true); setSavedState('草稿'); }
+  } catch (error) { setSavedState('连接失败'); showNotice('连接失败，请检查服务后重试'); }
 })();
   </script>
 </body>

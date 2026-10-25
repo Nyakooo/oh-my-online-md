@@ -1,0 +1,47 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ baseURL: process.env.TEST_URL || 'http://localhost:10778' });
+  try {
+    const fixture = await page.request.post('/api/notes', { data: { title: '保存状态测试', content: '原始内容' } });
+    assert.equal(fixture.status(), 201);
+    const writes = [];
+    page.on('request', request => { if (request.method() === 'PUT') writes.push(request.url()); });
+    await page.clock.install();
+    await page.goto('/');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    const button = page.locator('#save-note');
+    assert.equal(await button.textContent(), '✓', 'an unchanged note must show a checkmark');
+    assert.equal(await button.isDisabled(), true);
+    await page.clock.fastForward(3000);
+    assert.equal(await button.textContent(), '✓', 'the checkmark must not expire');
+    await page.keyboard.press('ControlOrMeta+s');
+    assert.equal(writes.length, 0, 'saving an unchanged note must not send a write');
+    await page.locator('#title').fill('修改标题');
+    assert.equal(await button.textContent(), '保存');
+    assert.equal(await button.isEnabled(), true);
+    await page.locator('#title').fill('保存状态测试');
+    assert.equal(await button.textContent(), '✓', 'restoring the title must restore the clean state');
+    await page.locator('#content p').click();
+    await page.keyboard.press('End');
+    await page.keyboard.insertText('补充');
+    assert.equal(await button.textContent(), '保存');
+    await page.keyboard.press('ControlOrMeta+z');
+    assert.equal(await page.evaluate(() => contentEditor.getValue()), '原始内容');
+    assert.equal(await button.textContent(), '✓', 'undoing back to saved text must restore the clean state');
+    await page.keyboard.press('End');
+    await page.keyboard.insertText('新内容');
+    await button.click();
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    assert.equal(writes.length, 1);
+    assert.equal(await button.textContent(), '✓');
+    assert.equal(await button.isDisabled(), true);
+    await page.clock.fastForward(3000);
+    assert.equal(await button.textContent(), '✓');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    assert.equal(await button.textContent(), '✓');
+    console.log('PASS: persistent clean checkmark, actual-change detection, title reversion, undo, no redundant writes, save and reload');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
