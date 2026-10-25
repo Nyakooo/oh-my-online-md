@@ -2,6 +2,10 @@
 
 所有正式版本均使用 Git 标签标记。发布记录与下载资产见 [GitHub Releases](https://github.com/Nyakooo/oh-my-online-md/releases)。
 
+## [v1.0.2] - 2026-10-25
+
+- 为编辑页、密码登录页和只读分享页补充统一的站点图标，提供 SVG 与 ICO 格式。
+
 ## [v1.0.1] - 2026-10-25
 
 - 将浏览器 Basic Auth 弹窗替换为仅需密码的登录页，无需用户名。
@@ -23,3 +27,5 @@
 [v1.0.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.0
 
 [v1.0.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.1
+
+[v1.0.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.2

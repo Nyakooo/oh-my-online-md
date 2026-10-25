@@ -26,7 +26,7 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html web/login.html
+//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
@@ -87,6 +87,8 @@ func (a *app) routes() http.Handler {
 	public.HandleFunc("GET /s/{token}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/s/"+url.PathEscape(r.PathValue("token"))+"/", http.StatusTemporaryRedirect)
 	})
+	public.HandleFunc("GET /favicon.svg", a.serveFavicon)
+	public.HandleFunc("GET /favicon.ico", a.serveFavicon)
 	public.HandleFunc("GET /login", a.serveLogin)
 	public.HandleFunc("POST /login", a.login)
 	public.Handle("/", a.auth(mux))
@@ -516,4 +518,20 @@ func (a *app) serveEditorLicense(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write(content)
+}
+
+func (a *app) serveFavicon(w http.ResponseWriter, r *http.Request) {
+	name, contentType := "web/favicon.svg", "image/svg+xml"
+	if r.URL.Path == "/favicon.ico" {
+		name, contentType = "web/favicon.ico", "image/x-icon"
+	}
+	content, err := webFiles.ReadFile(name)
+	if err != nil {
+		http.Error(w, "cannot load favicon", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Write(content)
 }
