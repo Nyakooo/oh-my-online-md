@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -27,7 +26,7 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html
+//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html web/login.html
 var webFiles embed.FS
 
 type app struct {
@@ -88,6 +87,8 @@ func (a *app) routes() http.Handler {
 	public.HandleFunc("GET /s/{token}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/s/"+url.PathEscape(r.PathValue("token"))+"/", http.StatusTemporaryRedirect)
 	})
+	public.HandleFunc("GET /login", a.serveLogin)
+	public.HandleFunc("POST /login", a.login)
 	public.Handle("/", a.auth(mux))
 	return public
 }
@@ -96,21 +97,6 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
-}
-func (a *app) auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a.password == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		_, password, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(password), []byte(a.password)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Online Markdown Notes", charset="UTF-8"`)
-			http.Error(w, "authentication required", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 func (a *app) listNotes(w http.ResponseWriter, _ *http.Request) {
 	entries, err := os.ReadDir(a.dataDir)

@@ -53,10 +53,10 @@ docker compose up -d
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `DATA_DIR` | `./data` | 宿主机上的数据目录，支持绝对路径 |
-| `PASSWORD` | 空 | 编辑端访问密码，设置后使用 HTTP Basic Auth |
+| `PASSWORD` | 空 | 编辑端访问密码，设置后通过密码登录页访问 |
 | `IMAGE_TAG` | `latest` | 镜像版本，可设置为 `v1.0.0` 固定版本 |
 
-`PASSWORD` 为空时，任何能够访问服务地址的人都可以读写笔记。Basic Auth 本身不加密传输；公网部署应在 HTTPS 反向代理后使用。
+`PASSWORD` 为空时，任何能够访问服务地址的人都可以读写笔记。登录时只需输入密码，无需用户名。登录状态通过 HttpOnly Cookie 保留 30 天，更改 `PASSWORD` 后原有登录状态失效；公网部署应在 HTTPS 反向代理后使用。
 
 查看运行状态及日志：
 

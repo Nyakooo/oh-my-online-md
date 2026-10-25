@@ -5,7 +5,7 @@ const path = require('node:path');
 (async () => {
   const browser = await chromium.launch();
   const baseURL = process.env.TEST_URL || 'http://localhost:10778';
-  const owner = await browser.newContext({ baseURL, httpCredentials: { username: 'owner', password: 'test-password' }, permissions: ['clipboard-read', 'clipboard-write'], colorScheme: 'light' });
+  const owner = await browser.newContext({ baseURL, permissions: ['clipboard-read', 'clipboard-write'], colorScheme: 'light' });
   const visitor = await browser.newContext({ baseURL });
   const page = await owner.newPage();
   const errors = [];
@@ -14,6 +14,16 @@ const path = require('node:path');
   page.on('request', request => { if (request.method() !== 'GET' && request.url().includes('/api/notes')) writes.push(request.url()); });
   try {
     await page.goto('/');
+    assert.equal(new URL(page.url()).pathname, '/login');
+    assert.equal(await page.locator('input').count(), 1);
+    await page.screenshot({ path: '/tmp/online-md-password-login.png' });
+    await page.getByLabel('访问密码').fill('wrong-password');
+    await page.getByRole('button', { name: '进入笔记' }).click();
+    await page.getByRole('alert').filter({ hasText: '密码错误' }).waitFor();
+    await page.getByLabel('访问密码').fill('test-password');
+    await page.getByRole('button', { name: '进入笔记' }).click();
+    await page.waitForURL(baseURL + '/');
+    await page.reload();
     await page.waitForFunction(() => document.querySelector('#save-state').textContent === '草稿');
     await page.locator('#title').fill('分享测试');
     await page.locator('.cm-content').click();

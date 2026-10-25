@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 func shareRequest(a *app, method, target, body string, owner bool) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, target, strings.NewReader(body))
 	if owner {
-		r.SetBasicAuth("owner", "test-password")
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: a.sessionValue(time.Now().Add(time.Hour))})
 	}
 	w := httptest.NewRecorder()
 	a.routes().ServeHTTP(w, r)
@@ -50,7 +51,7 @@ func TestShareReadOnlySnapshotAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, target := range []string{"/", "/api/notes", "/api/notes/" + n.ID, "/api/notes/" + n.ID + "/share", "/api/notes/" + n.ID + "/assets/" + name} {
-		if w := shareRequest(a, "GET", target, "", false); w.Code != 401 {
+		if w := shareRequest(a, "GET", target, "", false); w.Code != 401 && !(target == "/" && w.Code == 303) {
 			t.Fatalf("private path accessible: %s %d", target, w.Code)
 		}
 	}

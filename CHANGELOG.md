@@ -2,6 +2,12 @@
 
 所有正式版本均使用 Git 标签标记。发布记录与下载资产见 [GitHub Releases](https://github.com/Nyakooo/oh-my-online-md/releases)。
 
+## [v1.0.1] - 2026-10-25
+
+- 将浏览器 Basic Auth 弹窗替换为仅需密码的登录页，无需用户名。
+- 使用 HttpOnly、SameSite Cookie 保持登录状态，HTTPS 下启用 Secure 标记。
+- 修改访问密码后，原有登录状态失效；分享链接继续支持免登录只读访问。
+
 ## [v1.0.0] - 2026-10-25
 
 首次正式发布。
@@ -15,3 +21,5 @@
 - GHCR amd64 / arm64 镜像、Linux 二进制与开源开发文档。
 
 [v1.0.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.0
+
+[v1.0.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.1

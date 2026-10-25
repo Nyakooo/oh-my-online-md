@@ -27,7 +27,7 @@ start_server() {
   DATA_DIR="$task_data_dir" PORT=10778 PASSWORD="$task_password" "$task_tmp/online-md" >"$task_tmp/server.log" 2>&1 &
   task_server_pid=$!
   for attempt in {1..60}; do
-    if curl -fs --user owner:test-password --output /dev/null http://127.0.0.1:10778/api/notes; then return; fi
+    if curl -fs --output /dev/null http://127.0.0.1:10778/login; then return; fi
     sleep 0.2
   done
   cat "$task_tmp/server.log" >&2

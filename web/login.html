@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>登录 · 简记</title>
+<script>try{const t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color-scheme:light;--bg:#f4f4f1;--paper:#fff;--text:#292a27;--muted:#777;--line:#deded8;--button:#292a27;--ink:#fff}
+html[data-theme=dark]{color-scheme:dark;--bg:#111;--paper:#1b1b1b;--text:#eee;--muted:#999;--line:#383838;--button:#ddd;--ink:#181818}
+@media(prefers-color-scheme:dark){html:not([data-theme]){color-scheme:dark;--bg:#111;--paper:#1b1b1b;--text:#eee;--muted:#999;--line:#383838;--button:#ddd;--ink:#181818}}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:var(--bg);color:var(--text);padding:24px}main{width:100%;max-width:340px}h1{font-size:28px;margin:0 0 32px;font-weight:600}label{display:block;font-size:14px;margin-bottom:10px}input,button{font:inherit;width:100%;border-radius:8px;padding:13px 14px}input{background:var(--paper);color:var(--text);border:1px solid var(--line);outline:none}input:focus{border-color:var(--muted)}button{border:0;background:var(--button);color:var(--ink);cursor:pointer;margin-top:16px}button:disabled{opacity:.6;cursor:default}#error{font-size:14px;min-height:20px;color:var(--muted);margin:12px 0 0}
+</style>
+</head>
+<body>
+<main>
+<h1>简记</h1>
+<form method="post" action="/login">
+<label for="password">访问密码</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required autofocus aria-describedby="error">
+<button type="submit">进入笔记</button>
+<p id="error" role="alert"></p>
+</form>
+</main>
+<script>
+const form=document.querySelector('form'),button=form.querySelector('button'),error=document.querySelector('#error');
+form.addEventListener('submit',async event=>{
+ event.preventDefault();button.disabled=true;error.textContent='';
+ try{
+  const response=await fetch('/login',{method:'POST',body:new URLSearchParams(new FormData(form))});
+  if(response.ok){location.replace('/');return}
+  error.textContent=response.status===401?'密码错误，请重试。':'暂时无法登录，请稍后重试。';
+ }catch{error.textContent='连接失败，请重试。'}
+ button.disabled=false;document.querySelector('#password').focus();
+});
+</script>
+</body>
+</html>

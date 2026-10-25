@@ -234,6 +234,7 @@ async function api(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
     const message = await response.text();
+    if (response.status === 401) throw new Error('登录已过期，请在新标签页登录后重试，当前未保存内容仍保留');
     if (response.status === 413) throw new Error('请求超过上传限制，请检查图片大小及反向代理的 10m 配置');
     let detail;
     try { detail = JSON.parse(message).error; } catch {}

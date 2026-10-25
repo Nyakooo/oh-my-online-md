@@ -34,7 +34,7 @@ sudo systemctl reload nginx
 
 Nginx 如果也运行在容器内，并与应用共享 Docker 网络，上游地址改为 `http://online-md:10777`。前置代理或网关也应允许至少 10 MiB 的单次请求；多层代理中任一层限制过小都可能产生 `413`。
 
-应用提供 HTTP 服务，不自动签发证书。编辑端密码通过 Basic Auth 验证，公网部署需要由代理提供 HTTPS。分享链接只开放对应快照的只读页面和图片，不开放编辑端 API。
+应用提供 HTTP 服务，不自动签发证书。编辑端通过仅需密码的登录页验证，使用 HttpOnly、SameSite Cookie 保持登录状态，HTTPS 下启用 Secure 标记，公网部署需要由代理提供 HTTPS。分享链接只开放对应快照的只读页面和图片，不开放编辑端 API。
 
 ## 备份和恢复
 
