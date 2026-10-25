@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>简记 · Markdown</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #f4f4f1;
+      --sidebar: #f7f7f4;
+      --paper: #fff;
+      --text: #292a27;
+      --body-text: #50514b;
+      --muted: #999a92;
+      --line: #ecece7;
+      --hover: #efefeb;
+      --accent: #f2ca55;
+      --accent-soft: #fff5d5;
+      --accent-text: #55481e;
+      --danger: #b34237;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #171816;
+      --sidebar: #1e1f1c;
+      --paper: #242522;
+      --text: #efefe9;
+      --body-text: #cccdc5;
+      --muted: #999b92;
+      --line: #363732;
+      --hover: #30312d;
+      --accent: #d7b64c;
+      --accent-soft: #3c351f;
+      --accent-text: #f0d982;
+      --danger: #e08c81;
+    }
+    @media (prefers-color-scheme: dark) {
+      html:not([data-theme]) {
+        color-scheme: dark;
+        --page: #171816;
+        --sidebar: #1e1f1c;
+        --paper: #242522;
+        --text: #efefe9;
+        --body-text: #cccdc5;
+        --muted: #999b92;
+        --line: #363732;
+        --hover: #30312d;
+        --accent: #d7b64c;
+        --accent-soft: #3c351f;
+        --accent-text: #f0d982;
+        --danger: #e08c81;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; color: var(--text); background: var(--page); }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: min(100%, 1680px); height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
+    aside { display: flex; min-width: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 9px; color: var(--text); font-size: 16px; font-weight: 650; letter-spacing: -.035em; }
+    .mark { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 9px; background: #30312e; color: #fff; font-size: 13px; font-weight: 650; }
+    .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
+    .new-note:hover { filter: brightness(.97); }
+    .plus { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--accent); color: #51441b; font-size: 16px; line-height: 1; }
+    .section-label { margin: 0 9px 10px; color: var(--muted); font-size: 12px; font-weight: 550; }
+    .note-list { display: flex; min-height: 0; flex-direction: column; gap: 3px; overflow-y: auto; }
+    .note-item { display: flex; width: 100%; flex-direction: column; gap: 4px; border: 0; border-radius: 9px; padding: 10px 11px; color: var(--body-text); background: transparent; text-align: left; }
+    .note-item:hover { background: var(--hover); }
+    .note-item.active { color: var(--text); background: var(--hover); }
+    .note-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 550; }
+    .note-date { color: var(--muted); font-size: 11px; }
+    .empty-list { padding: 12px 9px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    main { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: var(--paper); }
+    .topbar { display: flex; min-height: 60px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 25px; border-bottom: 1px solid var(--line); }
+    .crumb { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .actions { display: flex; flex: none; align-items: center; gap: 10px; }
+    .save-state { color: var(--muted); font-size: 11px; }
+    .save-button { min-width: 54px; border: 0; border-radius: 7px; padding: 7px 12px; color: var(--accent-text); background: var(--accent-soft); font-size: 12px; font-weight: 550; }
+    .save-button:hover { filter: brightness(.97); }
+    .icon-button { display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 16px; }
+    .icon-button:hover { color: var(--danger); background: var(--hover); }
+    .icon-button:disabled { opacity: .4; cursor: default; }
+    .icon-button:disabled:hover { color: var(--muted); background: transparent; }
+    .editor-pane { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 50px clamp(24px, 9vw, 140px) 38px; }
+    .title-input { display: block; width: 100%; margin: 0 0 20px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: clamp(26px, 3.2vw, 35px); font-weight: 650; letter-spacing: -.045em; }
+    .title-input::placeholder { color: var(--muted); opacity: .65; }
+    textarea { display: block; width: 100%; min-height: calc(100dvh - 170px); resize: none; border: 0; outline: 0; padding: 0; color: var(--body-text); background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.95; tab-size: 2; }
+    textarea::placeholder { color: var(--muted); opacity: .68; }
+    .mobile-menu { display: none; }
+    .unsaved-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 13px; padding: 22px; color: var(--text); background: var(--paper); box-shadow: 0 20px 80px #0002; }
+    .unsaved-dialog::backdrop { background: #20211f66; }
+    .unsaved-dialog h2 { margin: 0 0 8px; font-size: 17px; }
+    .unsaved-dialog p { margin: 0 0 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .dialog-actions button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--body-text); background: var(--paper); font-size: 12px; }
+    .dialog-actions .primary { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
+    .dialog-actions .discard { color: var(--danger); }
+    @media (max-width: 760px) {
+      .app { display: block; min-height: 0; }
+      aside { display: none; }
+      aside.open { position: fixed; z-index: 5; inset: 0 auto 0 0; display: flex; width: min(82vw, 310px); box-shadow: 0 0 0 100vmax #0005; }
+      main { height: 100dvh; }
+      .topbar { min-height: 55px; padding: 0 14px; }
+      .mobile-menu { display: grid; }
+      .crumb { display: none; }
+      .actions { gap: 7px; }
+      .editor-pane { padding: 34px 24px 50px; }
+      textarea { min-height: calc(100dvh - 160px); }
+    }
+    @media (max-width: 390px) { .save-state { display: none; } .editor-pane { padding-right: 18px; padding-left: 18px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside id="sidebar">
+      <div class="brand"><span class="mark">M</span><span>简记</span></div>
+      <button class="new-note" id="new-note"><span class="plus">+</span><span>新建笔记</span></button>
+      <div class="section-label">我的笔记</div>
+      <div class="note-list" id="note-list"></div>
+      <div class="empty-list" id="empty-list" hidden>还没有笔记，点上方按钮记下第一条。</div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="mobile-menu" aria-label="笔记列表">☰</button>
+        <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
+        <div class="actions">
+          <span class="save-state" id="save-state">未保存</span>
+          <button class="icon-button" id="theme-toggle" aria-label="切换主题" title="切换主题">☾</button>
+          <button class="save-button" id="save-note" title="Ctrl+S / ⌘S 保存">保存</button>
+          <button class="icon-button" id="delete-note" title="删除笔记" aria-label="删除笔记" disabled><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button>
+        </div>
+      </header>
+      <section class="editor-pane">
+        <input class="title-input" id="title" placeholder="笔记标题" maxlength="200" aria-label="笔记标题">
+        <textarea id="content" placeholder="# 开始记录…&#10;&#10;直接编辑 Markdown。按 Ctrl+S 保存。" spellcheck="false"></textarea>
+      </section>
+    </main>
+  </div>
+  <dialog class="unsaved-dialog" id="unsaved-dialog">
+    <h2>有未保存的修改</h2>
+    <p>保存后继续，或放弃这些修改。</p>
+    <div class="dialog-actions">
+      <button id="cancel-navigation">取消</button>
+      <button class="discard" id="discard-changes">放弃修改</button>
+      <button class="primary" id="save-and-continue">保存并继续</button>
+    </div>
+  </dialog>
+  <script>
+const $ = (selector) => document.querySelector(selector);
+const state = { notes: [], current: null, saving: false, dirty: false };
+const escapeHTML = (value) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+async function api(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+  return response.status === 204 ? null : response.json();
+}
+function setSavedState(text) { $('#save-state').textContent = text; }
+function markDirty() { state.dirty = true; setSavedState('未保存'); }
+async function refreshNotes() {
+  state.notes = await api('/api/notes');
+  const list = $('#note-list');
+  list.replaceChildren();
+  $('#empty-list').hidden = state.notes.length > 0;
+  for (const note of state.notes) {
+    const button = document.createElement('button');
+    const date = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(new Date(note.updatedAt));
+    button.className = `note-item${note.id === state.current ? ' active' : ''}`;
+    button.innerHTML = `<span class="note-name">${escapeHTML(note.title || '未命名便签')}</span><span class="note-date">${date}</span>`;
+    button.addEventListener('click', () => openNote(note.id));
+    list.append(button);
+  }
+}
+function askUnsaved() {
+  return new Promise((resolve) => {
+    const dialog = $('#unsaved-dialog');
+    const finish = (choice) => { dialog.close(); resolve(choice); };
+    $('#save-and-continue').onclick = () => finish('save');
+    $('#discard-changes').onclick = () => finish('discard');
+    $('#cancel-navigation').onclick = () => finish('cancel');
+    dialog.showModal();
+  });
+}
+async function allowLeave() {
+  if (!state.dirty) return true;
+  const choice = await askUnsaved();
+  if (choice === 'save') return saveNote();
+  if (choice === 'discard') { state.dirty = false; setSavedState('已保存'); return true; }
+  return false;
+}
+async function openNote(id) {
+  if (id === state.current) { $('#sidebar').classList.remove('open'); return; }
+  if (!await allowLeave()) return;
+  const note = await api(`/api/notes/${id}`);
+  state.current = id;
+  $('#delete-note').disabled = false;
+  $('#title').value = note.title;
+  $('#content').value = note.content;
+  $('#crumb-title').textContent = note.title;
+  state.dirty = false;
+  setSavedState('已保存');
+  await refreshNotes();
+  $('#sidebar').classList.remove('open');
+}
+async function createNote() {
+  if (!await allowLeave()) return;
+  state.current = null;
+  state.dirty = false;
+  $('#delete-note').disabled = true;
+  await refreshNotes();
+  $('#title').value = '';
+  $('#content').value = '';
+  $('#crumb-title').textContent = '新便签';
+  setSavedState('草稿');
+  $('#sidebar').classList.remove('open');
+  $('#title').focus();
+}
+async function saveNote() {
+  if (state.saving || (state.current && !state.dirty)) return !state.dirty;
+  state.saving = true;
+  const title = $('#title').value;
+  const content = $('#content').value;
+  setSavedState('保存中…');
+  try {
+    const options = { method: state.current ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content }) };
+    const url = state.current ? `/api/notes/${state.current}` : '/api/notes';
+    const saved = await api(url, options);
+    state.current = saved.id;
+    $('#delete-note').disabled = false;
+    const titleChangedDuringSave = $('#title').value !== title;
+    if (!titleChangedDuringSave) $('#title').value = saved.title;
+    state.dirty = titleChangedDuringSave || content !== $('#content').value;
+    $('#crumb-title').textContent = $('#title').value;
+    setSavedState(state.dirty ? '未保存' : '已保存');
+    await refreshNotes();
+    return !state.dirty;
+  } catch (error) {
+    setSavedState('保存失败');
+    console.error(error);
+    return false;
+  } finally { state.saving = false; }
+}
+async function deleteNote() {
+  if (!state.current) return;
+  const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
+  if (!confirm(message)) return;
+  await api(`/api/notes/${state.current}`, { method: 'DELETE' });
+  state.current = null;
+  state.dirty = false;
+  $('#delete-note').disabled = true;
+  await refreshNotes();
+  if (state.notes.length) await openNote(state.notes[0].id);
+  else await createNote();
+}
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+  updateThemeButton();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (!localStorage.getItem('theme')) updateThemeButton();
+  });
+}
+function isDarkTheme() {
+  return document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === 'dark'
+    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function updateThemeButton() {
+  const dark = isDarkTheme();
+  $('#theme-toggle').textContent = dark ? '☀' : '☾';
+  $('#theme-toggle').title = dark ? '切换到白天主题' : '切换到黑夜主题';
+  $('#theme-toggle').setAttribute('aria-label', $('#theme-toggle').title);
+}
+$('#theme-toggle').addEventListener('click', () => {
+  const next = isDarkTheme() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('theme', next);
+  updateThemeButton();
+});
+$('#new-note').addEventListener('click', createNote);
+$('#title').addEventListener('input', markDirty);
+$('#content').addEventListener('input', markDirty);
+$('#save-note').addEventListener('click', saveNote);
+$('#delete-note').addEventListener('click', deleteNote);
+$('#mobile-menu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') $('#sidebar').classList.remove('open'); });
+document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveNote(); }
+});
+window.addEventListener('beforeunload', (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
+(async function init() {
+  initTheme();
+  try {
+    await refreshNotes();
+    if (state.notes.length) await openNote(state.notes[0].id);
+    else { $('#title').value = ''; $('#content').value = ''; setSavedState('草稿'); }
+  } catch (error) { setSavedState('连接失败'); console.error(error); }
+})();
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+services:
+  online-md:
+    image: ghcr.io/nyakooo/oh-my-online-md:latest
+    container_name: online-md
+    restart: unless-stopped
+    ports:
+      - "10777:10777"
+    environment:
+      DATA_DIR: /data
+      PASSWORD: ${PASSWORD:-}
+      PORT: 10777
+    volumes:
+      - "${DATA_DIR:-./data}:/data"
