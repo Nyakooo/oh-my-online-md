@@ -2,6 +2,11 @@
 
 所有正式版本均使用 Git 标签标记。发布记录与下载资产见 [GitHub Releases](https://github.com/Nyakooo/oh-my-online-md/releases)。
 
+## [v1.1.0] - 2026-10-25
+
+- 新增全局搜索，检索已保存笔记的标题和正文，展示匹配高亮与正文片段。
+- 支持中文、不区分大小写的文字匹配、快捷键及移动端搜索。
+
 ## [v1.0.2] - 2026-10-25
 
 - 为编辑页、密码登录页和只读分享页补充统一的站点图标，提供 SVG 与 ICO 格式。
@@ -29,3 +34,5 @@
 [v1.0.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.1
 
 [v1.0.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.2
+
+[v1.1.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.1.0

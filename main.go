@@ -45,6 +45,7 @@ type noteSummary struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	Snippet   string    `json:"snippet,omitempty"`
 }
 type noteMetadata struct {
 	ID        string    `json:"id"`
@@ -100,7 +101,8 @@ func env(key, fallback string) string {
 	}
 	return fallback
 }
-func (a *app) listNotes(w http.ResponseWriter, _ *http.Request) {
+func (a *app) listNotes(w http.ResponseWriter, r *http.Request) {
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	entries, err := os.ReadDir(a.dataDir)
 	if err != nil {
 		writeError(w, 500, "cannot read notes")
@@ -113,7 +115,14 @@ func (a *app) listNotes(w http.ResponseWriter, _ *http.Request) {
 		}
 		item, err := a.readNoteFromDir(entry.Name())
 		if err == nil {
-			items = append(items, noteSummary{item.ID, item.Title, item.UpdatedAt})
+			if query != "" && !strings.Contains(strings.ToLower(item.Title), query) && !strings.Contains(strings.ToLower(item.Content), query) {
+				continue
+			}
+			summary := noteSummary{ID: item.ID, Title: item.Title, UpdatedAt: item.UpdatedAt}
+			if query != "" {
+				summary.Snippet = searchSnippet(item.Content, query)
+			}
+			items = append(items, summary)
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
