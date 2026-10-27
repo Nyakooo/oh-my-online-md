@@ -2,6 +2,15 @@
 
 所有正式版本均使用 Git 标签标记。发布记录与下载资产见 [GitHub Releases](https://github.com/Nyakooo/oh-my-online-md/releases)。
 
+## [v1.2.0] - 2026-10-27
+
+- 将行内自动排版调整为独立的编辑 / 预览页签，补充格式工具栏、Tab 缩进及常用快捷键。
+- 新增加载动画、骨架屏和连接失败重试，完善移动端编辑体验。
+- 新增 Mermaid 图表渲染与缩放，支持图片拖放和文件选择。
+- 支持安全 HTML、图片 / 视频尺寸控制，以及 HTML 图片的附件清理和分享快照。
+- 分享页增加白天 / 黑夜切换，保存主题偏好并在未选择时跟随系统。
+- 根目录新增服务器部署脚本，支持镜像更新、服务检查、防重复运行与悬空镜像清理。
+
 ## [v1.1.0] - 2026-10-25
 
 - 新增全局搜索，检索已保存笔记的标题和正文，展示匹配高亮与正文片段。
@@ -36,3 +45,5 @@
 [v1.0.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.0.2
 
 [v1.1.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.1.0
+
+[v1.2.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.2.0

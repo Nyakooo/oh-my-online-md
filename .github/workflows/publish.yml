@@ -111,4 +111,4 @@ jobs:
             --title "$RELEASE_TAG · 简记" \
             --notes-file "docs/releases/${RELEASE_TAG}.md" \
             dist/*.tar.gz dist/SHA256SUMS \
-            compose.yaml deploy/nginx.conf docs/images/promo.png
+            compose.yaml deploy.sh deploy/nginx.conf docs/images/promo.png
