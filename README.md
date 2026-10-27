@@ -70,12 +70,13 @@ docker compose ps
 docker compose logs -f
 ```
 
-更新镜像：
+更新镜像（一键拉取、启动、检查服务并清理悬空镜像）：
 
 ```sh
-docker compose pull
-docker compose up -d
+bash deploy.sh
 ```
+
+脚本需要 Bash、curl、flock 和 Docker Compose v2；可从任意工作目录运行。参数、清理范围和失败处理见 [部署文档](docs/deployment.md#一键更新脚本)。
 
 停止服务使用 `docker compose down`，宿主机数据目录不会被删除。详细部署与备份说明见 [部署文档](docs/deployment.md)。
 
