@@ -81,7 +81,7 @@ const assert = require('node:assert/strict');
     assert.deepEqual(await reader.locator('video').evaluate(el => [el.clientWidth,el.clientHeight,el.controls]),[280,160,true]);
     await reader.waitForFunction(() => document.querySelector('video')?.videoWidth === 16);
     assert.match(await reader.locator('video').getAttribute('poster'), /^assets\//);
-    assert.equal(await reader.locator('script,iframe,[onerror]').count(),0);
+    assert.equal(await reader.locator('.markdown script,iframe,[onerror]').count(),0);
     await page.setViewportSize({width:390,height:844});
     await page.locator('#edit-tab').click();
     await page.locator('.cm-content').click();

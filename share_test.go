@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,5 +169,26 @@ func TestFailedShareReplacementKeepsOldLink(t *testing.T) {
 		if w := shareRequest(a, "GET", first.Path+"assets/"+name, "", false); w.Code == 200 {
 			t.Fatal("unshared asset accessible", name)
 		}
+	}
+}
+
+func TestShareThemeScriptAndPolicy(t *testing.T) {
+	a := &app{dataDir: t.TempDir(), password: "test-password"}
+	script := shareRequest(a, "GET", "/share-theme.js", "", false)
+	if script.Code != 200 || !bytes.Equal(script.Body.Bytes(), shareThemeJS) || script.Header().Get("Content-Type") != "text/javascript; charset=utf-8" {
+		t.Fatalf("public theme script: %d", script.Code)
+	}
+	n, err := a.newNote("主题", `<script src="/editor.bundle.js"></script><img src="x" onerror="alert(1)">`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := createTestShare(t, a, n.ID, 1)
+	page := shareRequest(a, "GET", record.Path, "", false)
+	if !strings.Contains(page.Header().Get("Content-Security-Policy"), "script-src '"+shareThemeIntegrity+"'") {
+		t.Fatal("share policy does not restrict scripts to the theme hash")
+	}
+	body := html.UnescapeString(page.Body.String())
+	if !strings.Contains(body, `src="/share-theme.js" integrity="`+shareThemeIntegrity+`"`) || strings.Contains(body, `src="/editor.bundle.js"`) || strings.Contains(body, "onerror=") {
+		t.Fatal("share script integrity or HTML isolation failed:", body)
 	}
 }

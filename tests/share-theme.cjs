@@ -1,0 +1,51 @@
+const {chromium} = require('playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const browser = await chromium.launch();
+  const baseURL = process.env.TEST_URL || 'http://localhost:10778';
+  const owner = await browser.newContext({baseURL});
+  const visitor = await browser.newContext({baseURL,colorScheme:'dark'});
+  let id;
+  try {
+    const created = await owner.request.post('/api/notes',{data:{title:'分享主题测试',content:'只读正文'}});
+    id = (await created.json()).id;
+    const share = await owner.request.post(`/api/notes/${id}/share`,{data:{days:1}});
+    const {path} = await share.json();
+    const page = await visitor.newPage();
+    const errors = [];
+    page.on('pageerror',error => errors.push(error.message));
+    await page.goto(path);
+    const toggle = page.getByRole('button',{name:'切换到白天模式',exact:true});
+    assert.equal(await toggle.count(),1,'share page must offer a light-mode toggle when the system is dark');
+    const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    assert.equal(await background(),'rgb(24, 24, 24)');
+    await toggle.click();
+    assert.equal(await background(),'rgb(255, 255, 255)');
+    await page.reload();
+    assert.equal(await background(),'rgb(255, 255, 255)','explicit light preference survives reload on a dark system');
+    await page.getByRole('button',{name:'切换到黑夜模式',exact:true}).click();
+    assert.equal(await background(),'rgb(24, 24, 24)');
+    await page.emulateMedia({colorScheme:'light'});
+    assert.equal(await background(),'rgb(24, 24, 24)','explicit dark preference overrides a light system');
+    await page.evaluate(() => localStorage.removeItem('theme'));
+    await page.reload();
+    assert.equal(await background(),'rgb(255, 255, 255)');
+    await page.emulateMedia({colorScheme:'dark'});
+    await page.getByRole('button',{name:'切换到白天模式',exact:true}).waitFor();
+    assert.equal(await background(),'rgb(24, 24, 24)','without a preference the theme follows system changes');
+    await page.evaluate(() => { Storage.prototype.getItem = () => {throw new Error('storage denied')}; Storage.prototype.setItem = () => {throw new Error('storage denied')}; });
+    await page.getByRole('button',{name:'切换到白天模式',exact:true}).click();
+    assert.equal(await background(),'rgb(255, 255, 255)','storage denial must not break switching');
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true);
+    await page.screenshot({path:'/tmp/share-theme-light.png'});
+    await page.getByRole('button',{name:'切换到黑夜模式',exact:true}).click();
+    await page.screenshot({path:'/tmp/share-theme-dark.png'});
+    assert.equal(await page.locator('textarea,[contenteditable],.markdown button').count(),0);
+    assert.deepEqual(errors,[]);
+    console.log('PASS: share theme toggle, persistence, system fallback/changes, storage denial and mobile read-only layout');
+  } finally {
+    if(id) await owner.request.delete(`/api/notes/${id}`);
+    await browser.close();
+  }
+})().catch(error => {console.error(error);process.exitCode=1});

@@ -21,7 +21,7 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/login.html web/favicon.svg web/favicon.ico
+//go:embed web/index.html web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
@@ -84,6 +84,7 @@ func (a *app) routes() http.Handler {
 	public.HandleFunc("GET /s/{token}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/s/"+url.PathEscape(r.PathValue("token"))+"/", http.StatusTemporaryRedirect)
 	})
+	public.HandleFunc("GET /share-theme.js", a.serveShareTheme)
 	public.HandleFunc("GET /favicon.svg", a.serveFavicon)
 	public.HandleFunc("GET /favicon.ico", a.serveFavicon)
 	public.HandleFunc("GET /login", a.serveLogin)

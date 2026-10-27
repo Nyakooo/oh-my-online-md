@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"html/template"
 	"io"
@@ -187,12 +189,34 @@ func (a *app) publicShare(token string) (shareRecord, string, error) {
 	}
 	return shareRecord{}, "", os.ErrNotExist
 }
+
+// Only this exact theme script is allowed on public shares. Note HTML cannot
+// introduce additional scripts or inline event handlers.
+var shareThemeJS = func() []byte {
+	content, err := webFiles.ReadFile("web/share-theme.js")
+	if err != nil {
+		panic(err)
+	}
+	return content
+}()
+var shareThemeIntegrity = func() string {
+	sum := sha256.Sum256(shareThemeJS)
+	return "sha256-" + base64.StdEncoding.EncodeToString(sum[:])
+}()
+
+func (a *app) serveShareTheme(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(shareThemeJS)
+}
+
 func shareHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' https: http: data:; media-src 'self' https: http:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src '"+shareThemeIntegrity+"'; img-src 'self' https: http: data:; media-src 'self' https: http:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 }
 
 var sharePage = template.Must(template.ParseFS(webFiles, "web/share.html"))
@@ -222,10 +246,11 @@ func (a *app) serveShare(w http.ResponseWriter, r *http.Request) {
 	})
 	var page bytes.Buffer
 	data := struct {
-		Title   string
-		Body    template.HTML
-		Expires string
-	}{record.Title, template.HTML(rendered), record.ExpiresAt.In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02 15:04 (UTC+8)")}
+		Title          string
+		Body           template.HTML
+		Expires        string
+		ThemeIntegrity string
+	}{record.Title, template.HTML(rendered), record.ExpiresAt.In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02 15:04 (UTC+8)"), shareThemeIntegrity}
 	if err := sharePage.Execute(&page, data); err != nil {
 		http.Error(w, "无法显示分享内容", 500)
 		return
