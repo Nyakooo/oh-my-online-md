@@ -30,7 +30,7 @@ jobs:
       - name: Verify bundled editor
         run: |
           pnpm build
-          git diff --exit-code -- web/editor.bundle.js web/editor.LICENSE.txt
+          git diff --exit-code -- web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt
       - name: Test Go application
         run: |
           go test -race ./...

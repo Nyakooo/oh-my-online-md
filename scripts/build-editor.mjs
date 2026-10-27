@@ -6,8 +6,12 @@ const result = await build({
   outfile: 'web/editor.bundle.js', legalComments: 'eof', metafile: true,
   banner: { js: '/*! Bundled dependencies and licenses: /editor.LICENSE.txt */' }
 });
+const diagrams = await build({
+  entryPoints: ['web/diagrams.js'], bundle: true, minify: true, format: 'iife',
+  outfile: 'web/diagrams.bundle.js', legalComments: 'eof', metafile: true
+});
 const roots = new Set();
-for (const input of Object.keys(result.metafile.inputs)) {
+for (const input of Object.keys({ ...result.metafile.inputs, ...diagrams.metafile.inputs })) {
   const match = input.match(/^(.*\/node_modules\/(?:@[^/]+\/)?[^/]+)\//);
   if (match) roots.add(match[1]);
 }

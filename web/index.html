@@ -140,6 +140,35 @@
     .markdown th, .markdown td { border: 1px solid var(--line); padding: 6px 12px; }
     .markdown a { color: var(--accent-text); text-decoration: underline; }
     .markdown hr { border: 0; border-top: 1px solid var(--line); }
+
+    .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px; background: var(--sidebar); border-radius: 10px 10px 0 0; }
+    #content { border: 1px solid var(--line); border-radius: 10px; }
+    .editor-toolbar button, .diagram-tools button, .shortcut-help { border: 0; border-radius: 5px; background: transparent; color: var(--body-text); padding: 7px 9px; font-size: 13px; }
+    .editor-toolbar button:hover, .diagram-tools button:hover { background: var(--hover); }
+    .editor-toolbar [aria-selected="true"] { background: var(--paper); color: var(--text); box-shadow: 0 1px 3px #0001; }
+    .format-tools { display: flex; flex-wrap: wrap; gap: 2px; margin-left: auto; }
+    .format-tools button { min-width: 29px; padding: 6px; }
+    #preview-panel { padding: 20px; min-height: 45vh; }
+    .preview-empty { color: var(--muted); }
+    .editor-help, .shortcut-details, .attachment-row { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.7; }
+    .shortcut-help { padding: 0 3px; font-size: inherit; text-decoration: underline; }
+    .attachment-row button { color: var(--accent-text); background: transparent; border: 0; padding: 0; }
+    .diagram { border: 1px solid var(--line); border-radius: 8px; margin: 16px 0; overflow: hidden; }
+    .diagram-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px; background: var(--sidebar); font-size: 12px; }
+    .diagram-viewport { overflow: auto; max-height: 70vh; padding: 16px; }
+    .diagram-canvas { width: max-content; min-width: 100%; }
+    .diagram-canvas svg { display: block; margin: auto; }
+    .diagram-status { padding: 0 16px; font-size: 13px; color: var(--muted); }
+    main { position: relative; }
+    .loading-panel { position: absolute; z-index: 4; inset: 60px 0 0; display: grid; align-content: center; justify-items: center; gap: 18px; background: var(--paper); color: var(--muted); font-size: 13px; }
+    .loading-orbit { width: 36px; height: 36px; border-radius: 12px; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 1.4s ease-in-out infinite; }
+    .loading-lines { width: min(320px, 65%); display: grid; gap: 12px; margin-top: 12px; }
+    .loading-lines i { display: block; height: 9px; border-radius: 8px; background: linear-gradient(100deg, var(--hover) 25%, var(--line) 45%, var(--hover) 65%); background-size: 250% 100%; animation: shimmer 1.6s ease infinite; }
+    .loading-lines i:last-child { width: 65%; }
+    @keyframes shimmer { to { background-position: -180% 0; } }
+    @media (prefers-reduced-motion: reduce) { .loading-orbit, .loading-lines i { animation: none; } }
+    @media (max-width: 760px) { .loading-panel { top: 55px; } .format-tools { margin-left: 0; } }
+
     .mobile-menu { display: none; }
 
 
@@ -199,9 +228,11 @@
           <button class="save-button" id="save-note" aria-label="保存" title="Ctrl+S / ⌘S 保存">保存</button>
         </div>
       </header>
-      <section class="editor-pane">
+      <div class="loading-panel" id="loading-panel" role="status" aria-live="polite"><span class="loading-orbit" aria-hidden="true"></span><span id="loading-message">正在加载笔记…</span><div class="loading-lines" aria-hidden="true"><i></i><i></i><i></i></div><button class="save-button" id="retry-load" hidden>重新加载</button></div>
+      <section class="editor-pane" id="editor-pane" inert aria-busy="true">
         <input class="title-input" id="title" placeholder="笔记标题" maxlength="200" aria-label="笔记标题">
         <div id="content"></div>
+        <div class="attachment-row">拖放或粘贴图片，也可以<button type="button" id="attach-image">选择图片</button>。<input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden></div>
       </section>
     </main>
   </div>
@@ -230,6 +261,18 @@
   <script>
 const $ = (selector) => document.querySelector(selector);
 const state = { notes: [], current: null, saving: false, dirty: false, saved: { title: '', content: '' } };
+let loading = true;
+function setLoading(value, message = '正在加载笔记…') {
+  loading = value;
+  $('#loading-panel').hidden = !value;
+  $('#loading-message').textContent = message;
+  $('#retry-load').hidden = true;
+  $('#editor-pane').inert = value;
+  $('#editor-pane').setAttribute('aria-busy', String(value));
+  $('#new-note').disabled = value;
+  $('#save-note').disabled = value || state.saving || Boolean(state.current && !state.dirty);
+  $('#share-note').disabled = value;
+}
 const pendingImages = new Map();
 function clearPendingImages() {
   for (const image of pendingImages.values()) URL.revokeObjectURL(image.url);
@@ -329,7 +372,7 @@ function askUnsaved() {
   });
 }
 async function allowLeave() {
-  if (state.saving) return false;
+  if (state.saving || loading) return false;
   if (!state.dirty) return true;
   const choice = await askUnsaved();
   if (choice === 'save') return saveNote();
@@ -338,19 +381,24 @@ async function allowLeave() {
 }
 async function openNote(id) {
   if (id === state.current) { $('#sidebar').classList.remove('open'); return; }
-  if (!await allowLeave()) return;
-  const note = await api(`/api/notes/${id}`);
-  clearPendingImages();
-  state.current = id;
-  $('#delete-note').disabled = false;
-  $('#title').value = note.title;
-  contentEditor.setValue(note.content, true);
-  state.saved = { title: note.title, content: note.content };
-  $('#crumb-title').textContent = note.title;
-  state.dirty = false;
-  setSavedState('已保存');
-  await refreshNotes();
-  $('#sidebar').classList.remove('open');
+  if (!await allowLeave() || loading) return;
+  setLoading(true);
+  try {
+    const note = await api(`/api/notes/${id}`);
+    clearPendingImages();
+    state.current = id;
+    $('#delete-note').disabled = false;
+    $('#title').value = note.title;
+    contentEditor.setValue(note.content, true);
+    state.saved = { title: note.title, content: note.content };
+    $('#crumb-title').textContent = note.title;
+    state.dirty = false;
+    setSavedState('已保存');
+    await searchNotes();
+    $('#sidebar').classList.remove('open');
+    return true;
+  } catch (error) { showNotice(error.message); return false; }
+  finally { setLoading(false); }
 }
 async function createNote() {
   if (!await allowLeave()) return;
@@ -368,7 +416,7 @@ async function createNote() {
   $('#title').focus();
 }
 async function saveNote() {
-  if (state.saving) return false;
+  if (state.saving || loading) return false;
   if (state.current && !state.dirty) { setSavedState('已保存'); return true; }
   state.saving = true;
   // Keep a fixed revision while uploading so navigation and edits cannot race
@@ -529,6 +577,14 @@ async function openShare() {
   } catch (error) { shareError(error.message); }
   finally { setShareBusy(false); }
 }
+$('#attach-image').onclick = () => { if (!loading && !state.saving) $('#image-input').click(); };
+$('#image-input').onchange = event => { insertImages([...event.target.files]); event.target.value = ''; };
+$('#content').addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
+$('#content').addEventListener('drop', event => {
+  if (!event.dataTransfer.files.length) return;
+  event.preventDefault();
+  if (!loading && !state.saving) insertImages([...event.dataTransfer.files]);
+});
 $('#share-note').addEventListener('click', openShare);
 $('#close-share').addEventListener('click', () => $('#share-dialog').close());
 $('#share-dialog').addEventListener('cancel', event => { if (shareBusy) event.preventDefault(); });
@@ -602,18 +658,31 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#
 $('#mobile-menu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 $('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') $('#sidebar').classList.remove('open'); });
 document.addEventListener('keydown', (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('#sidebar').classList.add('open'); $('#note-search').focus(); $('#note-search').select(); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.target.closest('.cm-editor')) { event.preventDefault(); $('#sidebar').classList.add('open'); $('#note-search').focus(); $('#note-search').select(); }
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); contentEditor.togglePreview(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveNote(); }
 });
 window.addEventListener('beforeunload', (event) => { if (state.dirty || state.saving) { event.preventDefault(); event.returnValue = ''; } });
-(async function init() {
+async function init() {
   initTheme();
+  setLoading(true);
   try {
     await refreshNotes();
-    if (state.notes.length) await openNote(state.notes[0].id);
+    setLoading(false);
+    if (state.notes.length) {
+      if (!await openNote(state.notes[0].id)) throw new Error('笔记加载失败');
+    }
     else { $('#title').value = ''; contentEditor.setValue('', true); setSavedState('草稿'); }
-  } catch (error) { setSavedState('连接失败'); showNotice('连接失败，请检查服务后重试'); }
-})();
+  } catch (error) {
+    setLoading(true);
+    setSavedState('连接失败');
+    $('#save-note').disabled = true;
+    $('#loading-message').textContent = '加载失败，请检查连接后重试';
+    $('#retry-load').hidden = false;
+  }
+}
+$('#retry-load').onclick = init;
+init();
   </script>
 </body>
 </html>

@@ -12,7 +12,8 @@
     "@codemirror/view": "^6.38.0",
     "@lezer/markdown": "^1.4.0",
     "markdown-it": "^14.1.0",
-    "markdown-it-task-lists": "^2.1.1"
+    "markdown-it-task-lists": "^2.1.1",
+    "mermaid": "^12.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

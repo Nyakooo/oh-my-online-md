@@ -26,7 +26,7 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/editor.bundle.js web/editor.LICENSE.txt web/share.html web/login.html web/favicon.svg web/favicon.ico
+//go:embed web/index.html web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
@@ -75,6 +75,7 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("PUT /api/notes/{id}", a.updateNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.deleteNote)
 	mux.HandleFunc("GET /editor.bundle.js", a.serveEditor)
+	mux.HandleFunc("GET /diagrams.bundle.js", a.serveEditor)
 	mux.HandleFunc("GET /editor.LICENSE.txt", a.serveEditorLicense)
 	mux.HandleFunc("GET /", a.serveIndex)
 
@@ -509,7 +510,11 @@ func (a *app) removeDeletedImages(item note, previousContent string, uploadedAss
 var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 func (a *app) serveEditor(w http.ResponseWriter, r *http.Request) {
-	content, err := webFiles.ReadFile("web/editor.bundle.js")
+	name := "web/editor.bundle.js"
+	if r.URL.Path == "/diagrams.bundle.js" {
+		name = "web/diagrams.bundle.js"
+	}
+	content, err := webFiles.ReadFile(name)
 	if err != nil {
 		http.Error(w, "editor unavailable", 500)
 		return

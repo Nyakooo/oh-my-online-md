@@ -11,16 +11,17 @@ async function pasteImage(page) {
     data.items.add(new File([bytes], 'clipboard.png', { type: 'image/png' }));
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
-  await page.locator('#title').click();
+  await page.locator('#preview-tab').click();
   await page.waitForFunction(() => { const img = document.querySelector('#content img'); return img && img.complete && img.naturalWidth === 1; });
 }
 async function getSource(page) { return page.evaluate(() => contentEditor.getValue()); }
 async function setSource(page, text) {
+  await page.locator('#edit-tab').click();
   await page.locator('.cm-content').click();
   await page.keyboard.press('ControlOrMeta+a');
   if (text) await page.keyboard.insertText(text);
   else await page.keyboard.press('Backspace');
-  await page.locator('#title').click();
+  await page.locator('#preview-tab').click();
 }
 async function save(page) {
   await page.locator('#save-note').click();
@@ -50,38 +51,36 @@ function diskImages() {
     assert.equal(await page.locator('#content strong').textContent(), '加粗');
     assert.equal(await page.locator('#content table').count(), 1);
     assert.equal(await page.locator('.topbar button:visible').count(), 3);
-    assert.equal(await page.locator('.editor-toolbar').count(), 0);
-    assert.equal(await page.getByRole('button', {name:'插入图片',exact:true}).count(), 0);
-    // Only the clicked line exposes Markdown. Other blocks remain rendered.
-    await page.locator('#content h2').click();
-    assert.ok((await page.locator('.cm-content').innerText()).includes('## 测试标题'));
-    assert.equal(await page.locator('#content strong').textContent(), '加粗');
-    await page.keyboard.press('End');
-    await page.keyboard.insertText('修改');
-    await page.keyboard.press('Enter');
-    assert.equal(await page.locator('#content h2').textContent(), '测试标题修改');
-    await page.keyboard.press('ControlOrMeta+z');
-    await page.keyboard.press('ControlOrMeta+z');
-    await page.locator('#title').click();
+    assert.equal(await page.locator('.editor-toolbar').count(), 1);
+    await page.locator('#edit-tab').click();
     assert.equal(await getSource(page), markdown);
-    assert.equal(await page.locator('#content h2').textContent(), '测试标题');
-    // Enter commits the previous line's appearance without a mode switch.
-    await setSource(page, '');
     await page.locator('.cm-content').click();
-    await page.keyboard.insertText('## 自动排版');
+    await page.keyboard.press('ControlOrMeta+End');
     await page.keyboard.press('Enter');
-    await page.locator('#content h2').waitFor();
-    assert.equal(await page.locator('#content h2').textContent(), '自动排版');
-    await setSource(page, '');
-    await page.locator('.cm-content').click();
-    await page.keyboard.insertText('## ');
-    const ime = await page.context().newCDPSession(page);
-    await ime.send('Input.imeSetComposition', { text: 'zhongwen', selectionStart: 8, selectionEnd: 8 });
-    await ime.send('Input.insertText', { text: '中文输入' });
-    await page.keyboard.press('Enter');
-    await page.locator('#title').click();
-    assert.equal(await page.locator('#content h2').textContent(), '中文输入');
-    await ime.detach();
+    await page.keyboard.press('Tab');
+    await page.keyboard.insertText('缩进');
+    assert.match(await getSource(page), /\n\s+缩进$/);
+    await page.keyboard.press('Shift+Tab');
+    assert.match(await getSource(page), /\n缩进$/);
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.insertText('快捷键');
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('ControlOrMeta+b');
+    assert.equal(await getSource(page), '**快捷键**');
+    await page.keyboard.press('ControlOrMeta+z');
+    assert.equal(await getSource(page), '快捷键');
+    await page.keyboard.press('ControlOrMeta+Shift+p');
+    assert.equal(await page.locator('#preview-tab').getAttribute('aria-selected'), 'true');
+    await setSource(page, '```mermaid\nflowchart LR\n A[开始] --> B[完成]\n```');
+    await page.locator('.diagram-canvas svg').waitFor();
+    const originalWidth = await page.locator('.diagram-canvas svg').evaluate(el => el.getBoundingClientRect().width);
+    await page.getByRole('button', {name:'放大图表',exact:true}).click();
+    assert.equal(await page.locator('.diagram output').textContent(), '125%');
+    assert.ok(await page.locator('.diagram-canvas svg').evaluate(el => el.getBoundingClientRect().width) > originalWidth);
+    await page.getByRole('button', {name:'重置图表缩放',exact:true}).click();
+    assert.equal(await page.locator('.diagram output').textContent(), '100%');
+    await setSource(page, '```mermaid\nnot a valid diagram\n```');
+    await page.waitForFunction(() => document.querySelector('.diagram-status')?.textContent.includes('无法渲染'));
     await setSource(page, markdown);
 
     await pasteImage(page);
@@ -95,6 +94,8 @@ function diskImages() {
     assert.match(savedSource, /!\[图片\]\(assets\/[a-f0-9]{32}\.png\)/);
     assert.ok(!savedSource.includes('pending/'));
     await page.reload();
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    await page.locator('#preview-tab').click();
     await page.waitForFunction(() => document.querySelector('#content img')?.naturalWidth === 1);
     assert.equal(await getSource(page), savedSource);
     const imageURL = await page.locator('#content img').getAttribute('src');
@@ -147,12 +148,12 @@ function diskImages() {
     await save(page);
     if (diskImages()) assert.deepEqual(diskImages(), []);
 
-    assert.equal(await page.locator('.editor-toolbar').count(), 0);
+    assert.equal(await page.locator('.editor-toolbar').count(), 1);
     assert.equal(await page.locator('.topbar button:visible').count(), 3);
     assert.equal(await page.locator('#notice').isVisible(), false);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
-    console.log('PASS: inline Markdown editing, automatic preview, Enter, undo, Chinese IME, minimal toolbar, save feedback, local-only paste, reload, image cleanup, discard, failed-save retry, mobile layout');
+    console.log('PASS: edit/preview tabs, Tab indentation, formatting shortcuts, undo, Mermaid zoom and errors, save feedback, local-only paste, reload, image cleanup, discard, failed-save retry, mobile layout');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

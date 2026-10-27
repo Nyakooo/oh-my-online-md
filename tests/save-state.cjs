@@ -23,7 +23,7 @@ const assert = require('node:assert/strict');
     assert.equal(await button.isEnabled(), true);
     await page.locator('#title').fill('保存状态测试');
     assert.equal(await button.textContent(), '✓', 'restoring the title must restore the clean state');
-    await page.locator('#content p').click();
+    await page.locator('.cm-content').click();
     await page.keyboard.press('End');
     await page.keyboard.insertText('补充');
     assert.equal(await button.textContent(), '保存');

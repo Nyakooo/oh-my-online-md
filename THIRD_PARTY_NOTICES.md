@@ -2,7 +2,7 @@
 
 ## Browser editor
 
-Bundled JavaScript dependency names, versions, copyrights and license terms are recorded in [web/editor.LICENSE.txt](web/editor.LICENSE.txt). This file is generated from the dependencies included by the editor build.
+Bundled JavaScript dependency names, versions, copyrights and license terms are recorded in [web/editor.LICENSE.txt](web/editor.LICENSE.txt). This file is generated from the dependencies included by the editor and lazy-loaded Mermaid diagram builds.
 
 ## Go Markdown renderer
 
