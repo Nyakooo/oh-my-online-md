@@ -123,6 +123,10 @@
     .title-input { display: block; width: 100%; margin: 0 0 20px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: clamp(26px, 3.2vw, 35px); font-weight: 650; letter-spacing: -.045em; }
     .title-input::placeholder { color: var(--muted); opacity: .65; }
     [hidden] { display: none !important; }
+    .app[data-loading="true"] [data-note-action],
+    .app[data-loading="true"] .crumb { visibility: hidden; pointer-events: none; }
+    .app[data-loading="true"] #note-list { opacity: .35; pointer-events: none; }
+
     #content { min-height: 55vh; }
     .rendered-block { cursor: text; padding: 2px 0; white-space: normal; }
     .rendered-block > :first-child { margin-top: 0; }
@@ -213,10 +217,10 @@
   </style>
 </head>
 <body>
-  <div class="app">
+  <div class="app" data-loading="true" aria-busy="true">
     <aside id="sidebar">
       <div class="brand"><span class="mark">M</span><span>简记</span></div>
-      <button class="new-note" id="new-note"><span class="plus">+</span><span>新建笔记</span></button>
+      <button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button>
       <input class="note-search" id="note-search" type="search" placeholder="搜索全部笔记" aria-label="搜索全部笔记" autocomplete="off">
       <div class="section-label" id="list-label" aria-live="polite">我的笔记</div>
       <div class="note-list" id="note-list"></div>
@@ -224,13 +228,13 @@
     </aside>
     <main>
       <header class="topbar">
-        <button class="icon-button mobile-menu" id="mobile-menu" aria-label="笔记列表">☰</button>
+        <button class="icon-button mobile-menu" id="mobile-menu" data-note-action aria-label="笔记列表">☰</button>
         <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
         <div class="actions">
-          <button class="icon-button" id="share-note" type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
+          <button class="icon-button" id="share-note" data-note-action type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
           <button class="icon-button" id="theme-toggle" type="button" aria-label="切换到黑夜模式" title="切换到黑夜模式"></button>
           <span class="sr-only" id="save-state" role="status" aria-live="polite">未保存</span>
-          <button class="save-button" id="save-note" aria-label="保存" title="Ctrl+S / ⌘S 保存">保存</button>
+          <button class="save-button" id="save-note" data-note-action aria-label="保存" title="Ctrl+S / ⌘S 保存">保存</button>
         </div>
       </header>
       <div class="loading-panel" id="loading-panel" role="status" aria-live="polite"><span class="loading-orbit" aria-hidden="true"></span><span id="loading-message">正在加载笔记…</span><div class="loading-lines" aria-hidden="true"><i></i><i></i><i></i></div><button class="save-button" id="retry-load" hidden>重新加载</button></div>
@@ -269,12 +273,18 @@ const state = { notes: [], current: null, saving: false, dirty: false, saved: { 
 let loading = true;
 function setLoading(value, message = '正在加载笔记…') {
   loading = value;
+  $('.app').dataset.loading = String(value);
+  $('.app').setAttribute('aria-busy', String(value));
   $('#loading-panel').hidden = !value;
   $('#loading-message').textContent = message;
   $('#retry-load').hidden = true;
   $('#editor-pane').inert = value;
   $('#editor-pane').setAttribute('aria-busy', String(value));
   $('#new-note').disabled = value;
+  $('#note-search').disabled = value;
+  $('#note-list').inert = value;
+  $('#mobile-menu').disabled = value;
+  $('#note-menu').hidden = true;
   $('#save-note').disabled = value || state.saving || Boolean(state.current && !state.dirty);
   $('#share-note').disabled = value;
 }
@@ -313,7 +323,7 @@ function setSavedState(text) {
   if (button.dataset.state === 'saving' || button.dataset.state === 'saved') { clearTimeout(noticeTimer); $('#notice').hidden = true; }
   if (button.dataset.state === 'saving') button.innerHTML = '<span class="save-spinner" aria-hidden="true"></span>';
   else button.textContent = button.dataset.state === 'saved' ? '✓' : button.dataset.state === 'error' ? '!' : '保存';
-  button.disabled = state.saving || Boolean(state.current && !state.dirty);
+  button.disabled = loading || state.saving || Boolean(state.current && !state.dirty);
 }
 function markDirty() {
   state.dirty = $('#title').value !== state.saved.title || contentEditor.getValue() !== state.saved.content;
@@ -384,23 +394,27 @@ async function allowLeave() {
   if (choice === 'discard') { state.dirty = false; setSavedState('已保存'); return true; }
   return false;
 }
+async function loadNote(id) {
+  const note = await api(`/api/notes/${id}`);
+  clearPendingImages();
+  state.current = id;
+  $('#delete-note').disabled = false;
+  $('#title').value = note.title;
+  contentEditor.setValue(note.content, true);
+  state.saved = { title: note.title, content: note.content };
+  $('#crumb-title').textContent = note.title;
+  state.dirty = false;
+  setSavedState('已保存');
+  await searchNotes();
+  $('#sidebar').classList.remove('open');
+}
 async function openNote(id) {
+  if (loading) return;
   if (id === state.current) { $('#sidebar').classList.remove('open'); return; }
   if (!await allowLeave() || loading) return;
   setLoading(true);
   try {
-    const note = await api(`/api/notes/${id}`);
-    clearPendingImages();
-    state.current = id;
-    $('#delete-note').disabled = false;
-    $('#title').value = note.title;
-    contentEditor.setValue(note.content, true);
-    state.saved = { title: note.title, content: note.content };
-    $('#crumb-title').textContent = note.title;
-    state.dirty = false;
-    setSavedState('已保存');
-    await searchNotes();
-    $('#sidebar').classList.remove('open');
+    await loadNote(id);
     return true;
   } catch (error) { showNotice(error.message); return false; }
   finally { setLoading(false); }
@@ -479,7 +493,7 @@ async function saveNote() {
   }
 }
 async function deleteNote() {
-  if (!state.current || state.saving) return;
+  if (loading || !state.current || state.saving) return;
   const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
   if (!confirm(message)) return;
   await api(`/api/notes/${state.current}`, { method: 'DELETE' });
@@ -530,7 +544,7 @@ const contentEditor = createNoteEditor($('#content'), {
   }
 });
 function insertImages(files) {
-  if (!files.length || state.saving) return;
+  if (loading || !files.length || state.saving) return;
   try {
     for (const file of files) {
       if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type)) throw new Error('仅支持 PNG、JPEG、GIF、WebP 图片');
@@ -569,7 +583,7 @@ function setShareBusy(busy) {
   for (const id of ['#create-share', '#revoke-share', '#share-days', '#close-share', '#copy-share']) $(id).disabled = busy;
 }
 async function openShare() {
-  if (state.saving || shareBusy) return;
+  if (loading || state.saving || shareBusy) return;
   contentEditor.blur();
   shareError('');
   $('#copy-share').textContent = '复制链接';
@@ -663,6 +677,10 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#
 $('#mobile-menu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 $('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') $('#sidebar').classList.remove('open'); });
 document.addEventListener('keydown', (event) => {
+  if (loading) {
+    if ((event.ctrlKey || event.metaKey) && ['k', 's', 'p'].includes(event.key.toLowerCase())) event.preventDefault();
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.target.closest('.cm-editor')) { event.preventDefault(); $('#sidebar').classList.add('open'); $('#note-search').focus(); $('#note-search').select(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); contentEditor.togglePreview(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveNote(); }
@@ -673,15 +691,12 @@ async function init() {
   setLoading(true);
   try {
     await refreshNotes();
-    setLoading(false);
-    if (state.notes.length) {
-      if (!await openNote(state.notes[0].id)) throw new Error('笔记加载失败');
-    }
+    if (state.notes.length) await loadNote(state.notes[0].id);
     else { $('#title').value = ''; contentEditor.setValue('', true); setSavedState('草稿'); }
+    setLoading(false);
   } catch (error) {
     setLoading(true);
     setSavedState('连接失败');
-    $('#save-note').disabled = true;
     $('#loading-message').textContent = '加载失败，请检查连接后重试';
     $('#retry-load').hidden = false;
   }
