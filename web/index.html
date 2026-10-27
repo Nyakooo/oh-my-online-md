@@ -131,7 +131,8 @@
     .markdown > :first-child { margin-top: 0; }
     .markdown h1, .markdown h2, .markdown h3, .markdown h4 { color: var(--text); line-height: 1.4; }
     .markdown h1 { font-size: 2em; } .markdown h2 { font-size: 1.5em; }
-    .markdown img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+    .markdown img, .markdown video { display: block; max-width: 100% !important; border-radius: 6px; }
+    .markdown img:not([height]), .markdown video:not([height]) { height: auto; }
     .markdown pre { white-space: pre; padding: 14px; overflow: auto; background: var(--hover); border-radius: 6px; }
     .markdown code { background: var(--hover); border-radius: 3px; padding: 2px 4px; font-size: .9em; }
     .markdown pre code { padding: 0; }
@@ -180,6 +181,10 @@
     .dialog-actions button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--body-text); background: var(--paper); font-size: 12px; }
     .dialog-actions .primary { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
     .dialog-actions .discard { color: var(--danger); }
+    .media-dialog label { display: grid; gap: 6px; margin-bottom: 14px; font-size: 13px; }
+    .media-dialog input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--paper); }
+    .media-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .media-dialog .media-error { color: var(--danger); }
     .share-dialog { width: min(420px, calc(100vw - 32px)); }
     .share-dialog header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .share-dialog header h2 { margin: 0; }

@@ -2,10 +2,7 @@ import { EditorState, Compartment, Transaction } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
-import MarkdownIt from 'markdown-it';
-import taskLists from 'markdown-it-task-lists';
-
-const md = new MarkdownIt({ html: false, linkify: true }).use(taskLists);
+import { renderMarkdown } from './markdown.js';
 let diagramLoader;
 function loadDiagrams() {
   if (!diagramLoader) diagramLoader = new Promise((resolve, reject) => {
@@ -75,6 +72,64 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', () => format(before, after, sample, line)); tools.append(button);
   }
+  const mediaDialog = document.createElement('dialog');
+  mediaDialog.className = 'unsaved-dialog media-dialog';
+  mediaDialog.setAttribute('aria-labelledby', 'media-heading');
+  mediaDialog.innerHTML = `<form><h2 id="media-heading">媒体尺寸</h2><p>先选中图片的 Markdown 或 HTML 可修改已有图片，也可以插入新媒体。</p><label>地址<input name="src" required placeholder="https://… 或 assets/…"></label><label>说明<input name="alt" placeholder="图片说明"></label><div class="media-dimensions"><label>宽度<input name="width" value="320" pattern="(?:[1-9][0-9]{0,4}%?|auto)" required placeholder="320 / 50% / auto"></label><label>高度<input name="height" value="auto" pattern="(?:[1-9][0-9]{0,4}%?|auto)" required placeholder="auto"></label></div><p>数字表示像素，也支持百分比；高度 auto 保持原始比例。</p><p class="media-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="media-cancel">取消</button><button class="primary" type="submit">应用</button></div></form>`;
+  document.body.append(mediaDialog);
+  const mediaForm = mediaDialog.querySelector('form');
+  let mediaRange, mediaType, mediaElement;
+  function openMediaDialog(type) {
+    if (!canEdit) return;
+    setMode('edit');
+    mediaType = type;
+    mediaRange = view.state.selection.main;
+    const selected = view.state.sliceDoc(mediaRange.from, mediaRange.to).trim();
+    const template = document.createElement('template');
+    template.innerHTML = renderMarkdown(selected);
+    const media = template.content.querySelector(type);
+    mediaElement = media || document.createElement(type);
+    const field = name => mediaForm.elements.namedItem(name);
+    field('src').value = media?.getAttribute('src') || media?.querySelector('source')?.getAttribute('src') || '';
+    field('alt').value = media?.getAttribute('alt') || '';
+    for (const name of ['width', 'height']) {
+      field(name).value = (media?.style[name] || media?.getAttribute(name) || (name === 'width' ? '320' : 'auto')).replace(/px$/, '');
+    }
+    field('alt').closest('label').hidden = type === 'video';
+    mediaDialog.querySelector('h2').textContent = type === 'img' ? '图片尺寸' : '视频尺寸';
+    mediaDialog.querySelector('.media-error').hidden = true;
+    mediaDialog.showModal();
+  }
+  for (const [type, label, icon] of [['img', '图片尺寸', '▧'], ['video', '插入视频', '▷']]) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.textContent = icon;
+    button.onmousedown = event => event.preventDefault();
+    button.onclick = () => openMediaDialog(type); tools.append(button);
+  }
+  mediaDialog.querySelector('.media-cancel').onclick = () => { mediaDialog.close(); view.focus(); };
+  mediaForm.onsubmit = event => {
+    event.preventDefault();
+    if (!canEdit) return;
+    const values = new FormData(mediaForm);
+    const src = values.get('src').trim();
+    let valid = false;
+    try { valid = ['http:', 'https:'].includes(new URL(src, location.href).protocol); } catch {}
+    if (!valid) {
+      const error = mediaDialog.querySelector('.media-error');
+      error.textContent = '请填写 HTTP / HTTPS 地址或相对附件路径'; error.hidden = false; return;
+    }
+    const size = name => { const value = values.get(name); return /^[0-9]+$/.test(value) ? value + 'px' : value; };
+    mediaElement.setAttribute('src', src);
+    mediaElement.style.width = size('width');
+    mediaElement.style.height = size('height');
+    // Inline size takes precedence over any previous HTML dimensions.
+    mediaElement.removeAttribute('width'); mediaElement.removeAttribute('height');
+    if (mediaType === 'img') mediaElement.setAttribute('alt', values.get('alt'));
+    else { mediaElement.setAttribute('controls', ''); mediaElement.setAttribute('preload', 'metadata'); }
+    const insert = mediaElement.outerHTML;
+    view.dispatch({ changes: { from: mediaRange.from, to: mediaRange.to, insert }, selection: { anchor: mediaRange.from + insert.length }, scrollIntoView: true, userEvent: 'input' });
+    mediaDialog.close(); view.focus();
+  };
   function setMode(next) {
     mode = next;
     write.hidden = mode !== 'edit'; preview.hidden = mode === 'edit'; tools.hidden = mode !== 'edit';
@@ -87,8 +142,10 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
   }
   async function renderPreview() {
     const version = ++revision;
-    preview.innerHTML = md.render(view.state.doc.toString()) || '<p class="preview-empty">暂无内容可预览</p>';
-    for (const img of preview.querySelectorAll('img')) img.src = resolveImage(img.getAttribute('src'));
+    preview.innerHTML = renderMarkdown(view.state.doc.toString()) || '<p class="preview-empty">暂无内容可预览</p>';
+    for (const media of preview.querySelectorAll('img, video, source')) {
+      for (const name of ['src', 'poster']) if (media.hasAttribute(name)) media.setAttribute(name, resolveImage(media.getAttribute(name)));
+    }
     const diagrams = [...preview.querySelectorAll('pre > code.language-mermaid')];
     for (const code of diagrams) {
       const source = code.textContent;
@@ -166,6 +223,6 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     },
     focus() { setMode('edit'); view.focus(); },
     blur() { view.contentDOM.blur(); },
-    destroy() { revision++; view.destroy(); }
+    destroy() { revision++; mediaDialog.remove(); view.destroy(); }
   };
 };

@@ -1,16 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/text"
 	"io"
 	"log"
 	"net/http"
@@ -354,21 +349,19 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-var markdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
-
 func (a *app) preview(w http.ResponseWriter, r *http.Request) {
 	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 2<<20))
 	if err != nil {
 		writeError(w, 413, "note is too large")
 		return
 	}
-	var output bytes.Buffer
-	if err := markdown.Convert(source, &output); err != nil {
+	output, err := renderNoteHTML(source)
+	if err != nil {
 		writeError(w, 500, "cannot render Markdown")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(output.Bytes())
+	_, _ = w.Write(output)
 }
 func (a *app) uploadImage(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
@@ -445,37 +438,15 @@ func atomicWrite(filename string, data []byte) error {
 
 func imageReferences(item note, content string) map[string]bool {
 	refs := make(map[string]bool)
-	root := markdown.Parser().Parse(text.NewReader([]byte(content)))
-	_ = ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		var destination []byte
-		switch node := node.(type) {
-		case *ast.Image:
-			destination = node.Destination
-		case *ast.Link:
-			destination = node.Destination
-		default:
-			return ast.WalkContinue, nil
-		}
-		parsed, err := url.Parse(string(destination))
-		if err != nil {
-			return ast.WalkContinue, nil
-		}
-		target := path.Clean(parsed.Path)
-		name := ""
-		if strings.HasPrefix(target, "assets/") && parsed.Host == "" {
-			name = strings.TrimPrefix(target, "assets/")
-		}
-		if strings.HasPrefix(target, "/api/notes/"+item.ID+"/assets/") {
-			name = strings.TrimPrefix(target, "/api/notes/"+item.ID+"/assets/")
-		}
-		ext := path.Ext(name)
-		if validID(strings.TrimSuffix(name, ext)) && imageTypes[ext] != "" {
+	rendered, err := renderNoteHTML([]byte(content))
+	if err != nil {
+		return refs
+	}
+	transformNoteHTML(rendered, func(destination string) string {
+		if name := noteAssetName(item.ID, destination); name != "" {
 			refs[name] = true
 		}
-		return ast.WalkContinue, nil
+		return destination
 	})
 	return refs
 }

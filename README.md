@@ -92,6 +92,28 @@ bash deploy.sh
 
 正文保存请求上限为 **2 MiB**。图片逐张上传，不计入正文请求大小。
 
+### 图片 / 视频尺寸与 HTML
+
+普通 Markdown 图片 `![说明](地址)` 按原图比例显示。要控制尺寸，可选中这段 Markdown，点击工具栏“图片尺寸”，填写宽度和高度后应用；宽度支持 `320`、`50%` 或 `auto`，高度 `auto` 保持比例。“插入视频”使用相同的尺寸设置，已有 HTML 视频也可以选中后修改。
+
+也可以直接在编辑区写 HTML（标签名是 `img`，不是 `image`）：
+
+```html
+<img src="https://example.com/image.png" width="320" alt="示例图片">
+
+<img src="assets/已有图片的文件名.png" style="width: 50%; height: auto" alt="半宽图片">
+
+<video src="https://example.com/video.mp4" controls width="480"></video>
+
+<video controls poster="https://example.com/cover.jpg" style="width: 100%; height: auto">
+  <source src="https://example.com/video.webm" type="video/webm">
+</video>
+```
+
+`width` / `height` 属性支持像素数字，尺寸样式支持 `px`、`%`、`em`、`rem`、`vw`、`vh` 和 `auto`。只设置宽度时保持比例，同时设置宽高会按指定尺寸显示；媒体宽度受正文宽度约束，适配手机。`assets/…` 请使用已有图片引用中的实际路径。修改为 HTML 后，图片仍参与保存、删除清理与只读分享快照。
+
+支持常用 HTML 排版标签，以及 `details` / `summary` 折叠内容。预览和分享都会过滤脚本、事件属性、iframe 和危险链接；`style` 仅保留图片 / 视频的 `width`、`height`、`max-width`、`max-height`。视频目前使用 HTTP / HTTPS 链接或服务器已有地址，不提供视频上传；播放能力取决于浏览器格式支持与视频源的访问权限。外部视频及图片不会被复制进分享快照。
+
 ### 分享
 
 点击右上角分享图标，选择有效期并生成链接。有效期支持 **1–7 天**，按生成时间起的 **24 小时 × 天数** 计算。

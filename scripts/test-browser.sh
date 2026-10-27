@@ -37,6 +37,7 @@ export TEST_URL=http://127.0.0.1:10778
 start_server "$task_tmp/editor" ''
 node tests/loading.cjs
 TEST_DATA_DIR="$task_tmp/editor" node tests/editor.cjs
+node tests/media.cjs
 node tests/save-state.cjs
 node tests/search.cjs
 stop_server

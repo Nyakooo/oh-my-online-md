@@ -6,15 +6,11 @@ import (
 	"html/template"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/text"
 )
 
 type shareRecord struct {
@@ -196,7 +192,7 @@ func shareHeaders(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' https: http: data:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self' https: http: data:; media-src 'self' https: http:; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 }
 
 var sharePage = template.Must(template.ParseFS(webFiles, "web/share.html"))
@@ -213,50 +209,23 @@ func (a *app) serveShare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "分享内容不可用", 404)
 		return
 	}
-	root := markdown.Parser().Parse(text.NewReader(source))
-	_ = ast.Walk(root, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		var destination *[]byte
-		switch node := node.(type) {
-		case *ast.Image:
-			destination = &node.Destination
-		case *ast.Link:
-			destination = &node.Destination
-		default:
-			return ast.WalkContinue, nil
-		}
-		parsed, err := url.Parse(string(*destination))
-		if err != nil {
-			return ast.WalkContinue, nil
-		}
-		target := path.Clean(parsed.Path)
-		var name string
-		if strings.HasPrefix(target, "assets/") && parsed.Host == "" {
-			name = strings.TrimPrefix(target, "assets/")
-		}
-		prefix := "/api/notes/" + record.NoteID + "/assets/"
-		if strings.HasPrefix(target, prefix) {
-			name = strings.TrimPrefix(target, prefix)
-		}
-		ext := path.Ext(name)
-		if validID(strings.TrimSuffix(name, ext)) && imageTypes[ext] != "" {
-			*destination = []byte("assets/" + name)
-		}
-		return ast.WalkContinue, nil
-	})
-	var rendered bytes.Buffer
-	if err := markdown.Renderer().Render(&rendered, source, root); err != nil {
+	rendered, err := renderNoteHTML(source)
+	if err != nil {
 		http.Error(w, "无法显示分享内容", 500)
 		return
 	}
+	rendered = transformNoteHTML(rendered, func(destination string) string {
+		if name := noteAssetName(record.NoteID, destination); name != "" {
+			return "assets/" + name
+		}
+		return destination
+	})
 	var page bytes.Buffer
 	data := struct {
 		Title   string
 		Body    template.HTML
 		Expires string
-	}{record.Title, template.HTML(rendered.String()), record.ExpiresAt.In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02 15:04 (UTC+8)")}
+	}{record.Title, template.HTML(rendered), record.ExpiresAt.In(time.FixedZone("UTC+8", 8*60*60)).Format("2006-01-02 15:04 (UTC+8)")}
 	if err := sharePage.Execute(&page, data); err != nil {
 		http.Error(w, "无法显示分享内容", 500)
 		return

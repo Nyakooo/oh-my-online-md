@@ -26,6 +26,9 @@ importers:
       '@lezer/markdown':
         specifier: ^1.4.0
         version: 1.8.1
+      dompurify:
+        specifier: ^3.4.17
+        version: 3.4.17
       markdown-it:
         specifier: ^14.1.0
         version: 14.3.3
