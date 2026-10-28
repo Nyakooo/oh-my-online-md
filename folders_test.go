@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,6 +25,8 @@ func (c *folderClient) request(method, path string, input any) *httptest.Respons
 		_ = json.NewEncoder(&body).Encode(input)
 	}
 	r := httptest.NewRequest(method, path, &body)
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%p", c)))
+	r.Header.Set("X-Note-Window", hex.EncodeToString(sum[:16]))
 	for _, cookie := range c.cookies {
 		r.AddCookie(cookie)
 	}
@@ -69,6 +74,7 @@ func TestFolderStorageAndAccess(t *testing.T) {
 	if err != nil || string(stored) != password {
 		t.Fatalf("password bytes not preserved: %v", err)
 	}
+	requireStatus(t, c.request("POST", "/api/folders/私密/unlock", map[string]string{"password": password}), 204)
 	requireStatus(t, c.request("PUT", "/api/notes/"+n.ID+"/folder", map[string]any{"folder": "私密"}), 200)
 	for _, name := range []string{"note.md", "meta.json", "assets/" + asset, "share.json"} {
 		if _, err = os.Stat(filepath.Join(a.dataDir, "私密", n.DirName, name)); err != nil {
@@ -100,6 +106,8 @@ func TestFolderStorageAndAccess(t *testing.T) {
 	requireStatus(t, stranger.request("POST", "/api/notes/"+n.ID+"/share", map[string]any{"days": 1}), 403)
 	// Renaming preserves the password, note IDs, and asset URLs, and invalidates old-folder grants.
 	requireStatus(t, c.request("PUT", "/api/folders/私密", map[string]any{"name": "改名", "keepPassword": true}), 200)
+	requireStatus(t, c.request("GET", "/api/notes/"+n.ID, nil), 403)
+	requireStatus(t, c.request("POST", "/api/folders/改名/unlock", map[string]string{"password": password}), 204)
 	requireStatus(t, c.request("GET", "/api/notes/"+n.ID, nil), 200)
 	requireStatus(t, stranger.request("GET", "/api/notes/"+n.ID, nil), 403)
 	data, err := os.ReadFile(filepath.Join(a.dataDir, "改名", ".pwd"))
@@ -188,6 +196,7 @@ func TestFolderMoveConflictsAndPasswordInvalidation(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(collision, "keep")); err != nil || string(b) != "keep" {
 		t.Fatal("collision overwritten", err)
 	}
+	requireStatus(t, c.request("POST", "/api/folders/locked/unlock", map[string]string{"password": "p"}), 204)
 	requireStatus(t, c.request("PUT", "/api/notes/"+n.ID+"/folder", map[string]any{"folder": "locked"}), 200)
 	// A fresh server has a fresh signing key even with identical data and passwords.
 	restarted := &app{dataDir: a.dataDir}

@@ -20,6 +20,7 @@ func clientRequest(handler http.Handler, method, path, token string, input any) 
 	}
 	r := httptest.NewRequest(method, path, &body)
 	r.Header.Set("Origin", testExtensionOrigin)
+	r.Header.Set("X-Note-Window", strings.Repeat("b", 32))
 	r.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -61,6 +62,7 @@ func TestClientSessionsAndFolderIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	requireStatus(t, clientRequest(h, "POST", "/api/folders/private/unlock", first, map[string]string{"password": "folder-secret"}), 204)
 	requireStatus(t, clientRequest(h, "PUT", "/api/notes/"+n.ID+"/folder", first, map[string]any{"folder": "private"}), 200)
 	requireStatus(t, clientRequest(h, "GET", "/api/notes/"+n.ID, second, nil), 403)
 	requireStatus(t, clientRequest(h, "POST", "/api/folders/private/unlock", second, map[string]string{"password": "folder-secret"}), 204)
@@ -93,7 +95,7 @@ func TestClientSessionsAndFolderIsolation(t *testing.T) {
 	// A website folder cookie must not grant access to a bearer client.
 	cookieGrantRequest := httptest.NewRequest("GET", "/api/notes/"+n.ID, nil)
 	cookieGrantRequest.Header.Set("Authorization", "Bearer "+first)
-	cookieGrantRequest.AddCookie(&http.Cookie{Name: folderCookieName("private"), Value: a.folderToken("private", []byte("folder-secret"), "4102444800")})
+	cookieGrantRequest.AddCookie(&http.Cookie{Name: folderCookieName("private"), Value: "legacy-folder-cookie"})
 	cookieGrantResult := httptest.NewRecorder()
 	h.ServeHTTP(cookieGrantResult, cookieGrantRequest)
 	requireStatus(t, cookieGrantResult, 403)

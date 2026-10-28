@@ -215,6 +215,7 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
       const range = view.state.selection.main;
       view.dispatch({ changes: { from: range.from, to: range.to, insert: text }, selection: { anchor: range.from + text.length }, scrollIntoView: true, userEvent: 'input' }); view.focus();
     },
+    closeDialogs() { mediaDialog.close(); mediaForm.reset(); mediaRange = mediaType = mediaElement = null; },
     refreshImages() { if (mode === 'preview') renderPreview(); },
     setEditable(value) {
       canEdit = value;

@@ -8,6 +8,10 @@ share.go                 分享快照、有效期与只读访问
 web/index.html           网页与扩展共享的界面结构
 web/app.js               保存、主题、分享与编辑交互
 web/folders.js           文件夹列表、拖拽与访问密码交互
+folder_access.go         窗口级目录授权与闲置超时
+sidebar_order.go         服务器持久排序
+web/folder-session.js    目录锁定与内存草稿恢复
+web/note-assets.js       网页与扩展的受控图片加载
 client_auth.go           扩展客户端会话与授权
 extension/               Manifest V3、配置和窗口入口
 scripts/build-extension.mjs  扩展构建与ZIP打包
@@ -59,6 +63,7 @@ bash scripts/test-browser.sh
 - `tests/search.cjs`：标题与正文检索、中文与大小写、匹配高亮、特殊符号、无结果、快捷键、未保存内容保护和移动端搜索。
 - `tests/share.cjs`：匿名只读访问、分享快照、有效期、替换、取消、图片和黑白灰夜间配色。
 - `tests/folders.cjs`：目录、拖拽、密码、重命名、移动与未保存保护。
+- `tests/folder-policy.cjs`：根笔记与目录排序、持久化、窗口锁定、闲置及草稿图片恢复。
 - `tests/extension.cjs`：真实 MV3 环境、客户端登录、图片、窗口复用、后台恢复、服务器切换和并发保存。
 
 测试会写入数据，请勿将 `TEST_URL` 或 `TEST_DATA_DIR` 指向真实部署。分享测试会修改测试分享的到期时间，以验证过期行为，不需要等待实际天数。

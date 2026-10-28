@@ -7,6 +7,9 @@ declare function refreshNotes(): Promise<void>;
 declare function setLoading(value: boolean): void;
 declare function clearPendingImages(): void;
 declare function markDirty(): void;
+declare function clearNoteAssets(): void;
+declare function resetFolderSession(): void;
+declare function noteAssetPath(path: string, noteID?: string | null): string | null;
 declare const folderState: { items: unknown[]; expanded: Set<string> };
 declare function showNotice(message: string): void;
 declare const contentEditor: { getValue(): string; setValue(value: string, reset?: boolean): void };
@@ -14,10 +17,7 @@ const $ = <T extends HTMLElement = HTMLElement>(selector: string) => document.qu
 let connection: Connection | undefined;
 let configured = false;
 let formBusy = false;
-let assetGeneration = 0;
 const responseOwners = new WeakMap<Response, Connection>();
-const assets = new Map<string, { url?: string; failed?: boolean }>();
-const placeholder = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
 function normalizeServer(value: string) {
   const url = new URL(value.trim());
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('请输入 HTTP / HTTPS 服务器地址，不含账号、查询参数或片段');
@@ -37,16 +37,12 @@ async function jsonResponse(response: Response) {
   if (!response.ok) throw new Error(String(data.error || `请求失败（${response.status}）`));
   return data;
 }
-function clearAssets() {
-  assetGeneration++;
-  for (const entry of assets.values()) if (entry.url) URL.revokeObjectURL(entry.url);
-  assets.clear();
-}
 async function request(path: string, options: RequestInit = {}) {
   if (!connection?.token || !path.startsWith('/api/')) throw new Error('请先连接服务器');
   const owner = connection;
   const headers = new Headers(options.headers);
   headers.set('Authorization', 'Bearer ' + owner.token);
+  if (!headers.has('X-Note-Window')) headers.set('X-Note-Window', (window as unknown as { noteWindowID: string }).noteWindowID);
   const response = await fetch(serverURL(path, owner.baseURL), { ...options, headers, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: options.signal || AbortSignal.timeout(60000) });
   responseOwners.set(response, owner);
   assertCurrent(response);
@@ -55,32 +51,6 @@ async function request(path: string, options: RequestInit = {}) {
 }
 function assertCurrent(response: Response) {
   if (responseOwners.get(response) !== connection) throw new Error('服务器连接已切换，请重新操作');
-}
-function assetPath(path: string, noteID: string | null) {
-  if (noteID && /^assets\/[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(path)) return `/api/notes/${noteID}/${path}`;
-  let candidate = path;
-  if (connection && path.startsWith(connection.baseURL + '/api/')) candidate = path.slice(connection.baseURL.length);
-  return /^\/api\/notes\/[a-f0-9]{32}\/assets\/[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(candidate) ? candidate : null;
-}
-function resolveImage(path: string, noteID: string | null): string | null {
-  const target = assetPath(path, noteID);
-  if (!target) return null;
-  const cached = assets.get(target);
-  if (cached) return cached.url || placeholder;
-  const entry: { url?: string; failed?: boolean } = {};
-  assets.set(target, entry);
-  const generation = assetGeneration;
-  request(target).then(async response => {
-    if (!response.ok) throw new Error(response.status === 403 ? '图片所在文件夹需要重新解锁' : '图片加载失败，请检查连接或重新打开笔记');
-    const blob = await response.blob();
-    if (generation !== assetGeneration) return;
-    entry.url = URL.createObjectURL(blob);
-    window.dispatchEvent(new Event('note-assets-ready'));
-  }).catch(error => {
-    if (generation !== assetGeneration) return;
-    entry.failed = true; showNotice(error.message);
-  });
-  return placeholder;
 }
 function status(message: string, ok = false) {
   $('#connection-status').textContent = message;
@@ -163,10 +133,11 @@ function initConnectionUI() {
         if (originPermission(connection.baseURL) !== originPermission(next.baseURL)) revocationWarning += await removeServerPermission(connection.baseURL);
       }
       connection = next;
-      clearAssets();
+      clearNoteAssets();
       await chrome.storage.local.set({ connection });
       hideSettings();
       if (switching) {
+        resetFolderSession();
         clearPendingImages(); contentEditor.setValue('', true);
         state.current = null; state.folder = ''; state.dirty = false;
         state.version = ''; state.saved = { title: '', content: '' }; state.notes = [];
@@ -187,7 +158,7 @@ function initConnectionUI() {
         revocationWarning += await removeServerPermission(connection.baseURL);
       }
       await chrome.storage.local.remove('connection'); connection = undefined; configured = false;
-      clearAssets(); clearPendingImages(); state.current = null; state.folder = ''; state.dirty = false;
+      resetFolderSession(); clearPendingImages(); state.current = null; state.folder = ''; state.dirty = false;
       contentEditor.setValue('', true); $<HTMLInputElement>('#title').value = ''; $('#crumb-title').textContent = '新便签';
       state.version = ''; state.saved = { title: '', content: '' }; state.notes = [];
       folderState.items = []; folderState.expanded.clear(); $('#note-list').replaceChildren();
@@ -202,7 +173,7 @@ function initConnectionUI() {
   $('#content').addEventListener('click', async event => {
     const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
     if (!anchor) return;
-    const target = assetPath(anchor.getAttribute('href') || '', state.current);
+    const target = noteAssetPath(anchor.getAttribute('href') || '', state.current);
     if (!target) {
       const href = anchor.getAttribute('href') || '';
       if (href.startsWith('#')) return;
@@ -212,18 +183,12 @@ function initConnectionUI() {
       }
       return;
     }
-    event.preventDefault();
-    try {
-      const response = await request(target); if (!response.ok) throw new Error('附件读取失败，请检查文件夹是否解锁');
-      const blobURL = URL.createObjectURL(await response.blob());
-      const download = document.createElement('a'); download.href = blobURL; download.download = target.split('/').pop()!; download.click();
-      setTimeout(() => URL.revokeObjectURL(blobURL), 30000);
-    } catch (error) { showNotice(String(error)); }
+    // Stored attachments are handled by the shared authenticated downloader.
   });
 }
 let initialized = false;
 const host = {
-  request, serverURL, resolveImage, clearAssets, assertCurrent,
+  request, serverURL, assertCurrent,
   async prepare() {
     if (!initialized) { initConnectionUI(); initialized = true; }
     if (!connection) connection = (await chrome.storage.local.get('connection')).connection as Connection | undefined;

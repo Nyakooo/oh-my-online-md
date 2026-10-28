@@ -98,7 +98,8 @@ function diskImages() {
     await page.locator('#preview-tab').click();
     await page.waitForFunction(() => document.querySelector('#content img')?.naturalWidth === 1);
     assert.equal(await getSource(page), savedSource);
-    const imageURL = await page.locator('#content img').getAttribute('src');
+    assert.match(await page.locator('#content img').getAttribute('src'), /^blob:/);
+    const imageURL = '/api/notes/' + await page.evaluate(() => state.current) + '/' + savedSource.match(/assets\/[a-f0-9]{32}\.png/)[0];
     if (diskImages()) assert.equal(diskImages().length, 1);
 
     // Removing one of two references must keep the shared file.

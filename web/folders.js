@@ -1,9 +1,10 @@
 // Folder UI extends the existing note list; all storage and access checks live on the server.
-const folderState = { items: [], expanded: new Set(), busy: false };
+const folderState = { items: [], expanded: new Set(), busy: false, drag: null };
 const folderIcons = {
   folder: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
   open: '<path d="M3 10V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v2"/><path d="M5 10h16l-3 10H3L1 10Z"/>',
   note: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  unlock: '<path d="M8 10V7a4 4 0 0 1 7-2"/><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M12 14v3"/>',
   lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
   folderplus: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 10v6M9 13h6"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
@@ -21,6 +22,7 @@ function updateFolderCrumb(title) {
   $('#crumb-title').textContent = (state.folder ? state.folder + ' / ' : '') + title;
 }
 function renderFolderList(list, notes, query, makeNote) {
+  for (const note of notes.filter(note => !note.folder)) list.append(makeNote(note));
   for (const folder of folderState.items) {
     const children = notes.filter(note => note.folder === folder.name);
     if (query && !children.length && !folder.locked) continue;
@@ -35,14 +37,18 @@ function renderFolderList(list, notes, query, makeNote) {
     toggle.className = 'folder-toggle';
     toggle.setAttribute('aria-expanded', String(expanded));
     toggle.setAttribute('aria-label', `${folder.locked ? '解锁' : expanded ? '收起' : '展开'}文件夹 ${folder.name}`);
-    toggle.innerHTML = `<span class="folder-chevron${expanded ? ' expanded' : ''}">${folderIcon('chevron')}</span><span class="folder-symbol">${folderIcon(expanded ? 'open' : 'folder')}</span><span class="folder-name">${escapeHTML(folder.name)}</span>${folder.protected ? folderIcon('lock') : ''}`;
+    toggle.innerHTML = `<span class="folder-chevron${expanded ? ' expanded' : ''}">${folderIcon('chevron')}</span><span class="folder-symbol">${folderIcon(expanded ? 'open' : 'folder')}</span><span class="folder-name">${escapeHTML(folder.name)}</span>${folder.protected && folder.locked ? folderIcon('lock') : ''}`;
     toggle.onclick = async () => {
-      if (loading || state.saving || folderState.busy) return;
-      if (folder.locked) {
-        if (!await unlockFolderUI(folder)) return;
-      } else if (folderState.expanded.has(folder.name)) folderState.expanded.delete(folder.name);
-      else folderState.expanded.add(folder.name);
-      searchNotes().catch(error => showNotice(error.message));
+      if (loading || state.saving || folderState.busy || folderSession.busy) return;
+      try {
+        if (folder.locked) { await unlockFolderUI(folder); return; }
+        if (folder.protected && folderState.expanded.has(folder.name)) { await lockFolderUI(folder); return; }
+        if (!await beforeFolderAccess(folder)) return;
+        if (folderSession.drafts.has(folder.name)) await restoreFolderDraft(folder);
+        if (folderState.expanded.has(folder.name)) folderState.expanded.delete(folder.name);
+        else folderState.expanded.add(folder.name);
+        await searchNotes();
+      } catch (error) { showNotice(error.message); }
     };
     const settings = document.createElement('button');
     settings.type = 'button';
@@ -50,7 +56,13 @@ function renderFolderList(list, notes, query, makeNote) {
     settings.setAttribute('aria-label', `${folder.name}设置`);
     settings.innerHTML = folderIcon('more');
     settings.onclick = () => editFolder(folder).catch(error => showNotice(error.message));
-    row.append(toggle, settings);
+    row.append(toggle);
+    if (folder.protected && !folder.locked) {
+      const lock = document.createElement('button'); lock.className = 'icon-button folder-lock-now'; lock.innerHTML = folderIcon('unlock');
+      lock.title = '已解锁，点击锁定'; lock.setAttribute('aria-label', `锁定文件夹 ${folder.name}`);
+      lock.onclick = () => lockFolderUI(folder).catch(error => showNotice(error.message)); row.append(lock);
+    }
+    row.append(settings);
     group.append(row);
     if (expanded) {
       const inner = document.createElement('div');
@@ -63,23 +75,22 @@ function renderFolderList(list, notes, query, makeNote) {
       group.append(inner);
     }
     bindFolderDrop(row, folder);
+    bindFolderSort(row, folder);
     list.append(group);
   }
-  for (const note of notes.filter(note => !note.folder)) list.append(makeNote(note));
 }
 function bindNoteDrag(button, note) {
   button.draggable = true;
   button.dataset.noteId = note.id;
   button.addEventListener('dragstart', event => {
     if (loading || state.saving || folderState.busy) { event.preventDefault(); return; }
+    folderState.drag = { kind: 'note', id: note.id, folder: note.folder || '' };
     event.dataTransfer.setData('application/x-online-md-note', note.id);
     event.dataTransfer.effectAllowed = 'move';
     document.body.classList.add('dragging-note');
   });
-  button.addEventListener('dragend', () => {
-    document.body.classList.remove('dragging-note');
-    document.querySelectorAll('.folder-dropover').forEach(el => el.classList.remove('folder-dropover'));
-  });
+  button.addEventListener('dragend', clearSortDrag);
+  bindNoteSort(button, note);
 }
 function bindFolderDrop(element, folder) {
   element.addEventListener('dragover', event => {
@@ -113,19 +124,24 @@ function folderDialogShell(title, fields, submitLabel) {
   dialog.showModal();
   return dialog;
 }
-async function unlockFolderUI(folder) {
+async function unlockFolderUI(folder, options = {}) {
   if (!folder.locked) return true;
-  if ($('#folder-dialog').open) return false;
+  if ($('#folder-dialog').open || folderSession.busy) return false;
+  if (!options.forMove && !await beforeFolderAccess(folder)) return false;
   return new Promise(resolve => {
     const dialog = folderDialogShell(`解锁「${folder.name}」`, '<p>输入密码后访问文件夹内的笔记。</p><label for="folder-password">访问密码</label><input id="folder-password" type="password" autocomplete="off">', '解锁');
     let succeeded = false;
-    dialog.onclose = () => resolve(succeeded);
+    dialog.onclose = () => { if (!dialog.open) resolve(succeeded); };
     $('#folder-form').onsubmit = async event => {
       event.preventDefault(); folderDialogBusy(true);
       try {
         await api(folderURL(folder.name) + '/unlock', folderJSON('POST', { password: $('#folder-password').value }));
+        folderSession.lastActivity = Date.now(); armFolderIdleTimer();
         await refreshNotes();
         folderState.expanded.add(folder.name);
+        folder.locked = false;
+        if (!options.forMove) await restoreFolderDraft(folder);
+        await searchNotes();
         succeeded = true; dialog.close();
       } catch (error) { folderDialogError(error); }
       finally { folderDialogBusy(false); }
@@ -158,36 +174,37 @@ async function editFolder(folder = null) {
     try { await lockFolderUI(folder); } catch (error) { showNotice(error.message); }
   };
   $('#folder-form').onsubmit = async event => {
-    event.preventDefault(); folderDialogBusy(true); folderState.busy = true;
+    event.preventDefault();
     const name = $('#folder-name').value;
     const keepPassword = existing && $('#folder-protect').checked && !$('#folder-change-password').checked;
     const password = $('#folder-protect').checked && !keepPassword ? $('#folder-password').value : null;
+    if (folder && state.folder === folder.name && $('#folder-protect').checked && state.dirty) {
+      dialog.close(); const allowed = await allowLeave(); dialog.showModal(); if (!allowed) return;
+    }
+    folderDialogBusy(true); folderState.busy = true;
     try {
-      await api(folder ? folderURL(folder.name) : '/api/folders', folderJSON(folder ? 'PUT' : 'POST', { name, password, keepPassword }));
-      if (state.folder === folder?.name) state.folder = name;
+      const savedFolder = await api(folder ? folderURL(folder.name) : '/api/folders', folderJSON(folder ? 'PUT' : 'POST', { name, password, keepPassword }));
+      const active = folder && state.folder === folder.name;
+      if (folderSession.drafts.has(folder?.name)) { const draft = folderSession.drafts.get(folder.name); folderSession.drafts.delete(folder.name); folderSession.drafts.set(name, draft); }
+      if (active) state.folder = name;
+      if (active && savedFolder.locked) resetProtectedEditor(name, true);
       if (folder) folderState.expanded.delete(folder.name);
-      folderState.expanded.add(name);
+      if (!savedFolder.locked) folderState.expanded.add(name);
       await refreshNotes();
       updateFolderCrumb($('#title').value || '新便签');
       dialog.close();
-    } catch (error) { folderDialogError(error); }
+      if (savedFolder.warning) showNotice(savedFolder.warning);
+    } catch (error) { markDirty(); folderDialogError(error); }
     finally { folderDialogBusy(false); folderState.busy = false; }
   };
 }
 async function lockFolderUI(folder) {
-  if (folderState.busy || loading || state.saving) return;
+  if (folderState.busy || loading || state.saving || folderSession.busy) return;
   if (state.folder === folder.name && !await allowLeave()) return;
-  folderState.busy = true;
-  setLoading(true);
+  folderState.busy = true; setLoading(true);
   try {
-    await api(folderURL(folder.name) + '/lock', { method: 'POST' });
-    if (state.folder === folder.name) {
-      clearPendingImages(); window.noteHost?.clearAssets(); state.current = null; state.version = ''; state.folder = ''; state.dirty = false;
-      $('#title').value = ''; contentEditor.setValue('', true); state.saved = { title: '', content: '' };
-      $('#delete-note').disabled = true; updateFolderCrumb('新便签'); setSavedState('草稿');
-      $('#share-dialog').close();
-    }
-    folderState.expanded.delete(folder.name);
+    await lockFolderPermissions(folder);
+    if (state.folder === folder.name) resetProtectedEditor(folder.name);
     await refreshNotes();
   } finally { folderState.busy = false; setLoading(false); }
 }
@@ -196,19 +213,22 @@ async function moveNoteToFolder(id, folder) {
   const note = state.notes.find(item => item.id === id);
   if (!note || (note.folder || '') === (folder?.name || '')) return;
   if (id === state.current && !await allowLeave()) return;
-  if (folder?.locked && !await unlockFolderUI(folder)) return;
+  if (folder?.locked && !await unlockFolderUI(folder, { forMove: true })) return;
   folderState.busy = true;
   setLoading(true);
   try {
+    const oldFolder = folderState.items.find(f => f.name === note.folder && f.protected);
     const moved = await api(`/api/notes/${id}/folder`, folderJSON('PUT', { folder: folder?.name || '' }));
     if (folder) folderState.expanded.add(folder.name);
     if (id === state.current) {
       state.folder = moved.folder;
       // Reload after a possible discard of unsaved changes.
+      if (oldFolder && oldFolder.name !== moved.folder) await lockFolderPermissions(oldFolder);
       await loadNote(id);
     }
     await refreshNotes();
-    showNotice(folder ? `已移入「${folder.name}」` : '已移出文件夹');
+    showNotice(moved.cleanupWarning || (folder ? `已移入「${folder.name}」` : '已移出文件夹'));
+    return true;
   } finally { folderState.busy = false; setLoading(false); }
 }
 function openMoveDialog() {
@@ -227,4 +247,63 @@ function initFolderUI() {
   $('#new-folder').onclick = () => editFolder().catch(error => showNotice(error.message));
   $('#move-note').onclick = openMoveDialog;
   bindFolderDrop($('#folder-root-drop'), null);
+}
+function clearSortDrag() {
+  folderState.drag = null; document.body.classList.remove('dragging-note');
+  document.querySelectorAll('.folder-dropover,.folder-sort-before,.folder-sort-after').forEach(el => el.classList.remove('folder-dropover', 'folder-sort-before', 'folder-sort-after'));
+}
+function sortDropPosition(element, event) { const box = element.getBoundingClientRect(); return event.clientY < box.top + box.height / 2 ? 'before' : 'after'; }
+function markSortPosition(element, event) {
+  document.querySelectorAll('.folder-sort-before,.folder-sort-after').forEach(el => el.classList.remove('folder-sort-before', 'folder-sort-after'));
+  element.classList.add('folder-sort-' + sortDropPosition(element, event));
+}
+async function saveSidebarSort(kind, id, before, folder = '') {
+  if ($('#note-search').value.trim()) { showNotice('请清空搜索后调整排序'); return; }
+  folderState.busy = true;
+  try { await api('/api/order', folderJSON('PUT', { kind, id, before, folder })); await refreshNotes(); }
+  finally { folderState.busy = false; }
+}
+function bindFolderSort(row, folder) {
+  row.draggable = true;
+  row.addEventListener('dragstart', event => {
+    if (loading || state.saving || folderState.busy || $('#note-search').value.trim()) { event.preventDefault(); return; }
+    folderState.drag = { kind: 'folder', id: folder.name };
+    event.dataTransfer.setData('application/x-online-md-folder', folder.name); event.dataTransfer.effectAllowed = 'move';
+  });
+  row.addEventListener('dragend', clearSortDrag);
+  row.addEventListener('dragover', event => {
+    if (!event.dataTransfer.types.includes('application/x-online-md-folder')) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; markSortPosition(row, event);
+  });
+  row.addEventListener('dragleave', event => { if (!row.contains(event.relatedTarget)) row.classList.remove('folder-sort-before', 'folder-sort-after'); });
+  row.addEventListener('drop', event => {
+    const id = event.dataTransfer.getData('application/x-online-md-folder'); if (!id) return;
+    event.preventDefault(); event.stopPropagation();
+    const names = folderState.items.map(f => f.name).filter(name => name !== id);
+    const index = names.indexOf(folder.name); const before = sortDropPosition(row, event) === 'before' ? folder.name : names[index + 1] || '';
+    clearSortDrag(); if (id !== folder.name) saveSidebarSort('folder', id, before).catch(error => showNotice(error.message));
+  });
+}
+function bindNoteSort(button, note) {
+  button.addEventListener('dragover', event => {
+    if (!event.dataTransfer.types.includes('application/x-online-md-note') || folderState.drag?.id === note.id) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; markSortPosition(button, event);
+  });
+  button.addEventListener('dragleave', event => { if (!button.contains(event.relatedTarget)) button.classList.remove('folder-sort-before', 'folder-sort-after'); });
+  button.addEventListener('drop', async event => {
+    const id = event.dataTransfer.getData('application/x-online-md-note'); if (!id) return;
+    event.preventDefault(); event.stopPropagation();
+    const source = state.notes.find(n => n.id === id);
+    const peers = state.notes.filter(n => (n.folder || '') === (note.folder || '') && n.id !== id).map(n => n.id);
+    const index = peers.indexOf(note.id); const before = sortDropPosition(button, event) === 'before' ? note.id : peers[index + 1] || '';
+    clearSortDrag(); if (!source || id === note.id || loading || state.saving || folderState.busy) return;
+    if ($('#note-search').value.trim()) { showNotice('请清空搜索后调整排序'); return; }
+    try {
+      if ((source.folder || '') !== (note.folder || '')) {
+        const target = folderState.items.find(f => f.name === note.folder);
+        if (!await moveNoteToFolder(id, target)) return;
+      }
+      await saveSidebarSort('note', id, before, note.folder || '');
+    } catch (error) { showNotice(error.message); }
+  });
 }

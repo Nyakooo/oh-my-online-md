@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const net = require('node:net');
 const { once } = require('node:events');
-const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'extension'];
+const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'folder-policy', 'extension'];
 async function freePort() {
   const server = net.createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;

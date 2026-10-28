@@ -163,27 +163,6 @@ func (a *app) deleteClientSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "无法撤销客户端会话")
 		return
 	}
-	delete(a.clientGrants, key)
+	a.revokeClientFolderAccessLocked(key)
 	w.WriteHeader(204)
-}
-func (a *app) clientGrant(r *http.Request, name string) string {
-	a.clientMu.Lock()
-	defer a.clientMu.Unlock()
-	return a.clientGrants[clientIdentity(r)][name]
-}
-func (a *app) setClientGrant(r *http.Request, name, value string) {
-	a.clientMu.Lock()
-	defer a.clientMu.Unlock()
-	if a.clientGrants == nil {
-		a.clientGrants = map[string]map[string]string{}
-	}
-	key := clientIdentity(r)
-	if value == "" {
-		delete(a.clientGrants[key], name)
-		return
-	}
-	if a.clientGrants[key] == nil {
-		a.clientGrants[key] = map[string]string{}
-	}
-	a.clientGrants[key][name] = value
 }

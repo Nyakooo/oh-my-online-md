@@ -13,7 +13,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,16 +20,14 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/app.js web/theme-init.js web/folders.js web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
+//go:embed web/index.html web/note-assets.js web/folder-session.js web/app.js web/theme-init.js web/folders.js web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
 	dataDir, password string
 	writeMu           sync.Mutex
-	folderKeyOnce     sync.Once
-	folderKey         []byte
 	clientMu          sync.Mutex
-	clientGrants      map[string]map[string]string
+	folderGrants      map[string]map[string]folderGrant
 }
 type note struct {
 	ID             string    `json:"id"`
@@ -72,6 +69,9 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/preview", a.preview)
 	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)
 	mux.HandleFunc("GET /api/notes/{id}/assets/{name}", a.getImage)
+	mux.HandleFunc("POST /api/folder-window/lock", a.lockWindow)
+	mux.HandleFunc("POST /api/folders/{name}/touch", a.touchFolder)
+	mux.HandleFunc("PUT /api/order", a.reorderSidebar)
 	mux.HandleFunc("GET /api/folders", a.listFolders)
 	mux.HandleFunc("POST /api/folders", a.saveFolder)
 	mux.HandleFunc("PUT /api/folders/{name}", a.saveFolder)
@@ -83,6 +83,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/notes/{id}", a.getNote)
 	mux.HandleFunc("PUT /api/notes/{id}", a.updateNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.deleteNote)
+	mux.HandleFunc("GET /folder-session.js", a.serveEditor)
+	mux.HandleFunc("GET /note-assets.js", a.serveEditor)
 	mux.HandleFunc("GET /app.js", a.serveEditor)
 	mux.HandleFunc("GET /theme-init.js", a.serveEditor)
 	mux.HandleFunc("GET /folders.js", a.serveEditor)
@@ -145,7 +147,12 @@ func (a *app) listNotes(w http.ResponseWriter, r *http.Request) {
 			items = append(items, summary)
 		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
+	order, err := a.readSidebarOrder()
+	if err != nil {
+		writeError(w, 500, "无法读取排序设置")
+		return
+	}
+	sortNoteSummaries(items, order)
 	writeJSON(w, 200, items)
 }
 func (a *app) createNote(w http.ResponseWriter, r *http.Request) {
@@ -547,6 +554,12 @@ var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".
 
 func (a *app) serveEditor(w http.ResponseWriter, r *http.Request) {
 	name := "web/editor.bundle.js"
+	if r.URL.Path == "/note-assets.js" {
+		name = "web/note-assets.js"
+	}
+	if r.URL.Path == "/folder-session.js" {
+		name = "web/folder-session.js"
+	}
 	if r.URL.Path == "/app.js" {
 		name = "web/app.js"
 	}

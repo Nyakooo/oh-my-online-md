@@ -6,7 +6,7 @@ const out = 'dist/extension';
 await rm(out, { recursive: true, force: true });
 await rm('dist/oh-my-online-md-extension.zip', { force: true });
 await mkdir(out, { recursive: true });
-for (const file of ['editor.bundle.js', 'diagrams.bundle.js', 'editor.LICENSE.txt', 'app.js', 'folders.js', 'theme-init.js', 'favicon.svg', 'favicon.ico']) await cp('web/' + file, out + '/' + file);
+for (const file of ['editor.bundle.js', 'diagrams.bundle.js', 'editor.LICENSE.txt', 'app.js', 'note-assets.js', 'folder-session.js', 'folders.js', 'theme-init.js', 'favicon.svg', 'favicon.ico']) await cp('web/' + file, out + '/' + file);
 let html = await readFile('web/index.html', 'utf8');
 html = html.replace('</head>', '<link rel="stylesheet" href="extension.css"></head>');
 html = html.replace('<body>', '<body>' + await readFile('extension/connection.html', 'utf8'));

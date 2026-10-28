@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,9 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -20,6 +17,7 @@ type folderSummary struct {
 	Name      string `json:"name"`
 	Protected bool   `json:"protected"`
 	Locked    bool   `json:"locked"`
+	Warning   string `json:"warning,omitempty"`
 }
 
 // User folders occupy the first level; note directories occupy the root or a folder.
@@ -116,21 +114,6 @@ func folderCookieName(name string) string {
 	sum := sha256.Sum256([]byte(name))
 	return "online_md_folder_" + hex.EncodeToString(sum[:12])
 }
-func (a *app) folderToken(name string, password []byte, expires string) string {
-	a.folderKeyOnce.Do(func() {
-		a.folderKey = make([]byte, 32)
-		if _, err := rand.Read(a.folderKey); err != nil {
-			panic(err)
-		}
-	})
-	mac := hmac.New(sha256.New, a.folderKey)
-	mac.Write([]byte(name))
-	mac.Write([]byte{0})
-	mac.Write(password)
-	mac.Write([]byte{0})
-	mac.Write([]byte(expires))
-	return expires + "." + hex.EncodeToString(mac.Sum(nil))
-}
 func (a *app) folderAllowed(r *http.Request, name string) bool {
 	if name == "" {
 		return true
@@ -142,19 +125,7 @@ func (a *app) folderAllowed(r *http.Request, name string) bool {
 	if !protected {
 		return true
 	}
-	value := ""
-	if clientIdentity(r) != "" {
-		value = a.clientGrant(r, name)
-	} else {
-		cookie, err := r.Cookie(folderCookieName(name))
-		if err != nil {
-			return false
-		}
-		value = cookie.Value
-	}
-	expires, _, ok := strings.Cut(value, ".")
-	timestamp, err := strconv.ParseInt(expires, 10, 64)
-	return ok && err == nil && timestamp > time.Now().Unix() && hmac.Equal([]byte(value), []byte(a.folderToken(name, password, expires)))
+	return a.windowFolderAllowed(r, name, password)
 }
 func (a *app) requireFolder(w http.ResponseWriter, r *http.Request, name string) bool {
 	if a.folderAllowed(r, name) {
@@ -194,6 +165,12 @@ func (a *app) listFolders(w http.ResponseWriter, r *http.Request) {
 		}
 		folders = append(folders, folderSummary{Name: entry.Name(), Protected: protected, Locked: !a.folderAllowed(r, entry.Name())})
 	}
+	order, err := a.readSidebarOrder()
+	if err != nil {
+		writeError(w, 500, "无法读取排序设置")
+		return
+	}
+	sortFolderSummaries(folders, order)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, folders)
 }
@@ -283,23 +260,20 @@ func (a *app) saveFolder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "无法更新 .pwd 文件，修改未完成")
 		return
 	}
-	if input.Password != nil {
-		a.setFolderCookie(w, r, input.Name, []byte(*input.Password))
-	}
+	a.revokeFolderAccess(old)
+	a.revokeFolderAccess(input.Name)
 	w.Header().Set("Cache-Control", "no-store")
 	status := 200
 	if creating {
 		status = 201
 	}
-	writeJSON(w, status, folderSummary{Name: input.Name, Protected: input.Password != nil, Locked: false})
-}
-func (a *app) setFolderCookie(w http.ResponseWriter, r *http.Request, name string, password []byte) {
-	expires := strconv.FormatInt(time.Now().Add(12*time.Hour).Unix(), 10)
-	if clientIdentity(r) != "" {
-		a.setClientGrant(r, name, a.folderToken(name, password, expires))
-		return
+	summary := folderSummary{Name: input.Name, Protected: input.Password != nil, Locked: input.Password != nil}
+	if !creating {
+		if err := a.renameSidebarOrder(old, input.Name); err != nil {
+			summary.Warning = "文件夹已保存，但排序更新失败，请重新拖拽排序"
+		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: folderCookieName(name), Value: a.folderToken(name, password, expires), Path: "/", HttpOnly: true, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteStrictMode})
+	writeJSON(w, status, summary)
 }
 func (a *app) unlockFolder(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
@@ -324,8 +298,8 @@ func (a *app) unlockFolder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "密码不正确，请重试")
 		return
 	}
-	if protected {
-		a.setFolderCookie(w, r, name, password)
+	if protected && !a.grantFolder(w, r, name, password) {
+		return
 	}
 	w.WriteHeader(204)
 }
@@ -339,11 +313,10 @@ func (a *app) lockFolder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "无效的文件夹名称")
 		return
 	}
-	if clientIdentity(r) != "" {
-		a.setClientGrant(r, name, "")
-		w.WriteHeader(204)
-		return
-	}
+	a.clientMu.Lock()
+	key := folderWindowKey(r)
+	delete(a.folderGrants[key], name)
+	a.clientMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: folderCookieName(name), Value: "", Path: "/", HttpOnly: true, MaxAge: -1, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(204)
 }
@@ -378,6 +351,11 @@ func (a *app) moveNote(w http.ResponseWriter, r *http.Request) {
 		if err := os.Rename(filepath.Join(a.dataDir, item.DirName), filepath.Join(a.dataDir, target)); err != nil {
 			writeError(w, 500, "无法移动笔记目录")
 			return
+		}
+	}
+	if target != item.DirName {
+		if err := a.removeNoteOrder(item.ID); err != nil {
+			item.CleanupWarning = "笔记已移动，但排序更新失败，请重新拖拽排序"
 		}
 	}
 	item.DirName = target
