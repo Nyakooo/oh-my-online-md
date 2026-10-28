@@ -2,9 +2,10 @@
 
 用于 Chrome Web Store 和 Microsoft Edge Add-ons 的首发草稿。最终提交审核/发布前必须由维护者核对确认。
 
+- `listing.en-US.md`：Edge 默认英语商店页说明，明确应用界面为简体中文。
 - `listing.zh-CN.md`：名称、简介、详情、权限用途、数据说明与审核步骤。
 - `chrome/`：Chrome 商店图标、宣传图和实际插件截图。
-- `edge/`：Edge 商店图标、宣传图和实际插件截图。
+- `edge/`：Edge 商店图标、宣传图和实际插件截图；`en-US/` 为英文宣传文案版本。
 - `source/`：生成宣传布局的源文件与截图来源说明。
 - `../privacy.md`：公开隐私说明。
 

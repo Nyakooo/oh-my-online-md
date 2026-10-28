@@ -64,6 +64,13 @@ try {
     await renderHTML(small, 440, 280, `${root}/${platform}/promo-small-440x280.png`);
     await renderHTML(banner, 1400, 560, `${root}/${platform}/promo-banner-1400x560.png`);
   }
+  await mkdir(root + '/edge/en-US', { recursive: true });
+  const smallEn = small.replace('灵感来了，<br>随手记一下。', 'A little thought.<br>A place to keep it.').replace('连接自己的服务器 · Markdown 笔记', 'Markdown notes on your own server').replace('快捷唤出 / 拖拽整理 / 图片粘贴', 'One shortcut / Drag to organize / Paste images').replace('font-size:30px', 'font-size:27px');
+  const bannerEn = banner.replace('你的笔记，<br>随叫随到。', 'Your notes,<br>one shortcut away.').replace('连接自己的服务器<br>Markdown 编辑 · 文件夹整理 · 图片粘贴', 'Connect your own server<br>Markdown · Folders · Images').replace('浏览器内快捷唤出 · macOS 使用 ⌘⇧Y', 'Open from your browser · macOS: ⌘⇧Y').replace('font-size:53px', 'font-size:43px');
+  await renderHTML(smallEn, 440, 280, root + '/edge/en-US/promo-small-440x280.png');
+  await renderHTML(bannerEn, 1400, 560, root + '/edge/en-US/promo-banner-1400x560.png');
+  await writeFile(root + '/source/promo-small.en-US.html', smallEn);
+  await writeFile(root + '/source/promo-banner.en-US.html', bannerEn.replace(image, '../edge/01-markdown-editor-1280x800.png'));
   await writeFile(root + '/source/promo-small.html', small);
   // Keep screenshot references relative instead of embedding a duplicate PNG in source.
   await writeFile(root + '/source/promo-banner.html', banner.replace(image, '../chrome/01-markdown-editor-1280x800.png'));
