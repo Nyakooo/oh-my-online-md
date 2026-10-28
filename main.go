@@ -132,8 +132,11 @@ func (a *app) createNote(w http.ResponseWriter, r *http.Request) {
 		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&input); err != nil {
-		writeError(w, 400, "invalid note data")
+	if !decodeNoteInput(w, r, &input) {
+		return
+	}
+	if len(input.Content) > maxNoteContentBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, noteContentTooLarge)
 		return
 	}
 	item, err := a.newNote(input.Title, input.Content)
@@ -144,6 +147,9 @@ func (a *app) createNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, item)
 }
 func (a *app) newNote(title, content string) (note, error) {
+	if len(content) > maxNoteContentBytes {
+		return note{}, errors.New(noteContentTooLarge)
+	}
 	title = normalizeTitle(title)
 	if utf8.RuneCountInString(title) > 200 {
 		return note{}, errors.New("title is too long")
@@ -192,8 +198,11 @@ func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 		Content        string   `json:"content"`
 		UploadedAssets []string `json:"uploadedAssets"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&input); err != nil {
-		writeError(w, 400, "invalid note data")
+	if !decodeNoteInput(w, r, &input) {
+		return
+	}
+	if len(input.Content) > maxNoteContentBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, noteContentTooLarge)
 		return
 	}
 	previousContent := item.Content
@@ -351,9 +360,9 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func (a *app) preview(w http.ResponseWriter, r *http.Request) {
-	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 2<<20))
+	source, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxNoteContentBytes))
 	if err != nil {
-		writeError(w, 413, "note is too large")
+		writeError(w, 413, noteContentTooLarge)
 		return
 	}
 	output, err := renderNoteHTML(source)
@@ -455,6 +464,15 @@ func imageReferences(item note, content string) map[string]bool {
 // Compare saved revisions so another in-flight save's new uploads are not removed.
 // Only application-managed images removed from the saved Markdown are deleted.
 func (a *app) removeDeletedImages(item note, previousContent string, uploadedAssets []string) error {
+	// No attachment cleanup is needed for text-only notes. Avoid parsing a large
+	// Markdown document into HTML merely to discover that no image files exist.
+	entries, err := os.ReadDir(filepath.Join(a.dataDir, item.DirName, "assets"))
+	if os.IsNotExist(err) || (err == nil && len(entries) == 0) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 	previous := imageReferences(item, previousContent)
 	// Include this save's uploads so a retry can discard an image uploaded by an
 	// earlier failed attempt, without touching another editor's in-flight files.
@@ -464,6 +482,9 @@ func (a *app) removeDeletedImages(item note, previousContent string, uploadedAss
 		if validID(strings.TrimSuffix(name, ext)) && imageTypes[ext] != "" {
 			previous[name] = true
 		}
+	}
+	if len(previous) == 0 {
+		return nil
 	}
 	current := imageReferences(item, item.Content)
 	var failures []error

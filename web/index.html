@@ -288,6 +288,9 @@ function setLoading(value, message = '正在加载笔记…') {
   $('#save-note').disabled = value || state.saving || Boolean(state.current && !state.dirty);
   $('#share-note').disabled = value;
 }
+const MAX_NOTE_CONTENT_BYTES = 16 * 1024 * 1024;
+const MAX_NOTE_REQUEST_BYTES = 32 * 1024 * 1024;
+const utf8Size = value => new TextEncoder().encode(value).byteLength;
 const pendingImages = new Map();
 function clearPendingImages() {
   for (const image of pendingImages.values()) URL.revokeObjectURL(image.url);
@@ -297,13 +300,14 @@ function clearPendingImages() {
 const escapeHTML = (value) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 async function api(url, options = {}) {
+  if (typeof options.body === 'string' && utf8Size(options.body) > MAX_NOTE_REQUEST_BYTES) throw new Error('笔记保存请求超过 32 MiB 上限，请缩减内容或拆分笔记，当前编辑内容已保留');
   const response = await fetch(url, options);
   if (!response.ok) {
     const message = await response.text();
     if (response.status === 401) throw new Error('登录已过期，请在新标签页登录后重试，当前未保存内容仍保留');
-    if (response.status === 413) throw new Error('请求超过上传限制，请检查图片大小及反向代理的 10m 配置');
     let detail;
     try { detail = JSON.parse(message).error; } catch {}
+    if (response.status === 413) throw new Error(detail || (url.endsWith('/assets') ? '图片上传超限：单张图片最多 10 MiB；请检查反向代理上传限制' : '保存请求被服务器或反向代理拒绝（413），请检查 Nginx 的 client_max_body_size 是否至少为 32m；当前编辑内容已保留'));
     throw new Error(detail || `请求失败（HTTP ${response.status}）`);
   }
   return response.status === 204 ? null : response.json();
@@ -437,6 +441,16 @@ async function createNote() {
 async function saveNote() {
   if (state.saving || loading) return false;
   if (state.current && !state.dirty) { setSavedState('已保存'); return true; }
+  const title = $('#title').value;
+  let content = contentEditor.getValue();
+  const contentBytes = utf8Size(content);
+  if (contentBytes > MAX_NOTE_CONTENT_BYTES || utf8Size(JSON.stringify({title, content})) > MAX_NOTE_REQUEST_BYTES) {
+    setSavedState('保存失败');
+    showNotice(contentBytes > MAX_NOTE_CONTENT_BYTES
+      ? `笔记正文过长：当前 ${(contentBytes / 1024 / 1024).toFixed(2)} MiB，上限 16 MiB（UTF-8），请拆分后保存；当前编辑内容已保留`
+      : '笔记保存请求超过 32 MiB 上限，请拆分后保存；当前编辑内容已保留');
+    return false;
+  }
   state.saving = true;
   // Keep a fixed revision while uploading so navigation and edits cannot race
   // the server's cleanup of removed references.
@@ -444,8 +458,6 @@ async function saveNote() {
   contentEditor.setEditable(false);
   const controls = ['#title', '#save-note', '#share-note'];
   controls.forEach(selector => { $(selector).disabled = true; });
-  const title = $('#title').value;
-  let content = contentEditor.getValue();
   setSavedState('保存中…');
   try {
     const images = [...pendingImages].filter(([path]) => content.includes(path));

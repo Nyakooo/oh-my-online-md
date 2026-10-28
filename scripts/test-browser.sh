@@ -39,6 +39,7 @@ node tests/share-theme.cjs
 node tests/loading.cjs
 TEST_DATA_DIR="$task_tmp/editor" node tests/editor.cjs
 node tests/media.cjs
+node tests/large-note.cjs
 node tests/save-state.cjs
 node tests/search.cjs
 stop_server
