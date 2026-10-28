@@ -44,10 +44,15 @@ func (a *app) getShare(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "笔记不存在")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
+	}
+	if folder := noteFolder(item); folder != "" {
+		if _, protected, err := a.folderPassword(folder); protected || err != nil {
+			writeError(w, 403, "受密码保护的文件夹不支持公开分享")
+			return
+		}
 	}
 	record, err := a.readShare(item.DirName)
 	if os.IsNotExist(err) {
@@ -77,10 +82,15 @@ func (a *app) createShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "分享有效期为 1–7 个整天")
 		return
 	}
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "笔记不存在")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
+	}
+	if folder := noteFolder(item); folder != "" {
+		if _, protected, err := a.folderPassword(folder); protected || err != nil {
+			writeError(w, 403, "受密码保护的文件夹不支持公开分享")
+			return
+		}
 	}
 	old, err := a.readShare(item.DirName)
 	if err != nil && !os.IsNotExist(err) {
@@ -154,10 +164,15 @@ func copyShareImage(source, destination string) error {
 func (a *app) deleteShare(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "笔记不存在")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
+	}
+	if folder := noteFolder(item); folder != "" {
+		if _, protected, err := a.folderPassword(folder); protected || err != nil {
+			writeError(w, 403, "受密码保护的文件夹不支持公开分享")
+			return
+		}
 	}
 	root := filepath.Join(a.dataDir, item.DirName)
 	if err := os.Remove(filepath.Join(root, "share.json")); err != nil && !os.IsNotExist(err) {
@@ -174,17 +189,19 @@ func (a *app) publicShare(token string) (shareRecord, string, error) {
 	if !validID(token) {
 		return shareRecord{}, "", os.ErrNotExist
 	}
-	entries, err := os.ReadDir(a.dataDir)
+	entries, err := a.noteDirectories()
 	if err != nil {
 		return shareRecord{}, "", err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	for _, dir := range entries {
+		if folder := filepath.Dir(dir); folder != "." {
+			if _, protected, err := a.folderPassword(folder); protected || err != nil {
+				continue
+			}
 		}
-		record, err := a.readShare(entry.Name())
+		record, err := a.readShare(dir)
 		if err == nil && record.Token == token && record.ExpiresAt.After(time.Now()) {
-			return record, filepath.Join(a.dataDir, entry.Name(), "shares", token), nil
+			return record, filepath.Join(a.dataDir, dir, "shares", token), nil
 		}
 	}
 	return shareRecord{}, "", os.ErrNotExist
@@ -222,6 +239,8 @@ func shareHeaders(w http.ResponseWriter) {
 var sharePage = template.Must(template.ParseFS(webFiles, "web/share.html"))
 
 func (a *app) serveShare(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	shareHeaders(w)
 	record, dir, err := a.publicShare(r.PathValue("token"))
 	if err != nil {
@@ -266,11 +285,25 @@ func (a *app) serveShareImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	a.writeMu.Lock()
 	_, dir, err := a.publicShare(r.PathValue("token"))
+	if err != nil {
+		a.writeMu.Unlock()
+		http.NotFound(w, r)
+		return
+	}
+	file, err := os.Open(filepath.Join(dir, "assets", name))
+	a.writeMu.Unlock()
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", imageTypes[ext])
-	http.ServeFile(w, r, filepath.Join(dir, "assets", name))
+	http.ServeContent(w, r, name, info.ModTime(), file)
 }

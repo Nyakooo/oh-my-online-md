@@ -21,12 +21,14 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
+//go:embed web/index.html web/folders.js web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
 	dataDir, password string
 	writeMu           sync.Mutex
+	folderKeyOnce     sync.Once
+	folderKey         []byte
 }
 type note struct {
 	ID             string    `json:"id"`
@@ -34,12 +36,14 @@ type note struct {
 	Content        string    `json:"content"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 	DirName        string    `json:"-"`
+	Folder         string    `json:"folder"`
 	CleanupWarning string    `json:"cleanupWarning,omitempty"`
 }
 type noteSummary struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	Folder    string    `json:"folder"`
 	Snippet   string    `json:"snippet,omitempty"`
 }
 type noteMetadata struct {
@@ -64,11 +68,18 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/preview", a.preview)
 	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)
 	mux.HandleFunc("GET /api/notes/{id}/assets/{name}", a.getImage)
+	mux.HandleFunc("GET /api/folders", a.listFolders)
+	mux.HandleFunc("POST /api/folders", a.saveFolder)
+	mux.HandleFunc("PUT /api/folders/{name}", a.saveFolder)
+	mux.HandleFunc("POST /api/folders/{name}/unlock", a.unlockFolder)
+	mux.HandleFunc("POST /api/folders/{name}/lock", a.lockFolder)
+	mux.HandleFunc("PUT /api/notes/{id}/folder", a.moveNote)
 	mux.HandleFunc("GET /api/notes", a.listNotes)
 	mux.HandleFunc("POST /api/notes", a.createNote)
 	mux.HandleFunc("GET /api/notes/{id}", a.getNote)
 	mux.HandleFunc("PUT /api/notes/{id}", a.updateNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.deleteNote)
+	mux.HandleFunc("GET /folders.js", a.serveEditor)
 	mux.HandleFunc("GET /editor.bundle.js", a.serveEditor)
 	mux.HandleFunc("GET /diagrams.bundle.js", a.serveEditor)
 	mux.HandleFunc("GET /editor.LICENSE.txt", a.serveEditorLicense)
@@ -99,23 +110,27 @@ func env(key, fallback string) string {
 	return fallback
 }
 func (a *app) listNotes(w http.ResponseWriter, r *http.Request) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	w.Header().Set("Cache-Control", "no-store")
 	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	entries, err := os.ReadDir(a.dataDir)
+	entries, err := a.noteDirectories()
 	if err != nil {
 		writeError(w, 500, "cannot read notes")
 		return
 	}
 	items := make([]noteSummary, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, dir := range entries {
+		parent := filepath.Dir(dir)
+		if parent != "." && !a.folderAllowed(r, parent) {
 			continue
 		}
-		item, err := a.readNoteFromDir(entry.Name())
+		item, err := a.readNoteFromDir(dir)
 		if err == nil {
 			if query != "" && !strings.Contains(strings.ToLower(item.Title), query) && !strings.Contains(strings.ToLower(item.Content), query) {
 				continue
 			}
-			summary := noteSummary{ID: item.ID, Title: item.Title, UpdatedAt: item.UpdatedAt}
+			summary := noteSummary{ID: item.ID, Title: item.Title, UpdatedAt: item.UpdatedAt, Folder: noteFolder(item)}
 			if query != "" {
 				summary.Snippet = searchSnippet(item.Content, query)
 			}
@@ -178,9 +193,10 @@ func (a *app) newNote(title, content string) (note, error) {
 	return item, nil
 }
 func (a *app) getNote(w http.ResponseWriter, r *http.Request) {
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "note not found")
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
 	}
 	writeJSON(w, 200, item)
@@ -188,9 +204,8 @@ func (a *app) getNote(w http.ResponseWriter, r *http.Request) {
 func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "note not found")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
 	}
 	var input struct {
@@ -226,12 +241,11 @@ func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 func (a *app) deleteNote(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "note not found")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
 	}
-	if err = os.RemoveAll(filepath.Join(a.dataDir, item.DirName)); err != nil {
+	if err := os.RemoveAll(filepath.Join(a.dataDir, item.DirName)); err != nil {
 		writeError(w, 500, "cannot delete note")
 		return
 	}
@@ -241,15 +255,12 @@ func (a *app) readNote(id string) (note, error) {
 	if !validID(id) {
 		return note{}, errors.New("invalid id")
 	}
-	entries, err := os.ReadDir(a.dataDir)
+	entries, err := a.noteDirectories()
 	if err != nil {
 		return note{}, err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		item, err := a.readNoteFromDir(entry.Name())
+	for _, dir := range entries {
+		item, err := a.readNoteFromDir(dir)
 		if err == nil && item.ID == id {
 			return item, nil
 		}
@@ -257,7 +268,7 @@ func (a *app) readNote(id string) (note, error) {
 	return note{}, os.ErrNotExist
 }
 func (a *app) readNoteFromDir(dirName string) (note, error) {
-	if filepath.Base(dirName) != dirName {
+	if !a.safeDirectory(dirName) {
 		return note{}, errors.New("invalid directory")
 	}
 	dir := filepath.Join(a.dataDir, dirName)
@@ -275,10 +286,11 @@ func (a *app) readNoteFromDir(dirName string) (note, error) {
 	}
 	item.Content = string(content)
 	item.DirName = dirName
+	item.Folder = noteFolder(item)
 	return item, nil
 }
 func (a *app) writeNote(item note) error {
-	if filepath.Base(item.DirName) != item.DirName || item.DirName == "." || item.DirName == "" {
+	if !a.safeDirectory(item.DirName) {
 		return errors.New("invalid directory")
 	}
 	dir := filepath.Join(a.dataDir, item.DirName)
@@ -376,9 +388,8 @@ func (a *app) preview(w http.ResponseWriter, r *http.Request) {
 func (a *app) uploadImage(w http.ResponseWriter, r *http.Request) {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
-	item, err := a.readNote(r.PathValue("id"))
-	if err != nil {
-		writeError(w, 404, "note not found")
+	item, ok := a.requestNote(w, r)
+	if !ok {
 		return
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 10<<20))
@@ -416,24 +427,42 @@ func (a *app) getImage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	item, err := a.readNote(r.PathValue("id"))
+	a.writeMu.Lock()
+	item, ok := a.requestNote(w, r)
+	if !ok {
+		a.writeMu.Unlock()
+		return
+	}
+	file, err := os.Open(filepath.Join(a.dataDir, item.DirName, "assets", name))
+	a.writeMu.Unlock()
 	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeFile(w, r, filepath.Join(a.dataDir, item.DirName, "assets", name))
+	// An open handle survives directory moves without holding up saves during a download.
+	http.ServeContent(w, r, name, info.ModTime(), file)
 }
 
 // Replace a file only after all bytes have been written successfully.
 func atomicWrite(filename string, data []byte) error {
+	return atomicWriteMode(filename, data, 0644)
+}
+
+func atomicWriteMode(filename string, data []byte, mode os.FileMode) error {
 	file, err := os.CreateTemp(filepath.Dir(filename), ".note-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(file.Name())
-	if err = file.Chmod(0644); err == nil {
+	if err = file.Chmod(mode); err == nil {
 		_, err = file.Write(data)
 	}
 	closeErr := file.Close()
@@ -504,6 +533,9 @@ var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".
 
 func (a *app) serveEditor(w http.ResponseWriter, r *http.Request) {
 	name := "web/editor.bundle.js"
+	if r.URL.Path == "/folders.js" {
+		name = "web/folders.js"
+	}
 	if r.URL.Path == "/diagrams.bundle.js" {
 		name = "web/diagrams.bundle.js"
 	}

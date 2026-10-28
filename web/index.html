@@ -214,23 +214,56 @@
 
     }
     @media (max-width: 390px) { .editor-pane { padding-right: 18px; padding-left: 18px; } }
+
+    .new-actions { display:flex; align-items:center; gap:8px; margin:27px 0; }
+    .new-actions .new-note { margin:0; flex:1; }
+    #new-folder { flex:none; width:35px; height:35px; color:var(--body-text); }
+    .folder-icon { width:17px; height:17px; flex:none; vertical-align:middle; }
+    .note-item { flex-direction:row; align-items:flex-start; gap:9px; cursor:grab; }
+    .note-item > .folder-icon { margin-top:1px; color:var(--muted); width:16px; height:16px; }
+    .note-details { display:flex; flex-direction:column; min-width:0; gap:4px; flex:1; }
+    .folder-group { flex:none; }
+    .folder-row { display:flex; align-items:center; border-radius:8px; }
+    .folder-row:hover { background:var(--hover); }
+    .folder-toggle { display:flex; align-items:center; min-width:0; gap:8px; flex:1; padding:11px 3px 11px 7px; border:0; background:transparent; color:var(--body-text); font-size:13px; text-align:left; }
+    .folder-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .folder-chevron { display:flex; color:var(--muted); }
+    .folder-chevron .folder-icon { width:11px; height:11px; transition:transform .15s; }
+    .folder-chevron.expanded .folder-icon { transform:rotate(90deg); }
+    .folder-symbol { display:flex; color:#aa9658; }
+    .folder-symbol .folder-icon { width:19px; height:19px; }
+    .folder-toggle>.icon-lock { width:13px; height:13px; color:var(--muted); }
+    .folder-settings { width:29px; height:29px; margin-right:3px; flex:none; }
+    .folder-children { border-left:1px solid var(--line); margin:0 0 6px 19px; padding-left:9px; }
+    .folder-empty { padding:10px 5px; color:var(--muted); font-size:11px; }
+    .folder-root-drop { flex:none; margin:16px 0 0; border:1px dashed var(--line); border-radius:8px; padding:12px 5px; text-align:center; color:var(--muted); font-size:11px; }
+    .folder-dropover, .dragging-note .folder-root-drop { background:var(--accent-soft); outline:1px dashed var(--accent); }
+    .folder-dialog label { display:block; margin:18px 0 7px; color:var(--body-text); font-size:13px; }
+    .folder-dialog input:not([type="checkbox"]), .folder-dialog select { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--text); font:inherit; }
+    .folder-dialog .folder-check { display:flex; align-items:center; gap:8px; }
+    .folder-dialog p { margin:12px 0 20px; font-size:12px; }
+    .folder-dialog #folder-error { color:var(--danger); }
+    .folder-dialog #folder-show-password, .folder-lock-button { padding:8px 0; background:transparent; color:var(--body-text); border:0; font-size:12px; }
+    .folder-dialog button:disabled { opacity:.5; cursor:default; }
+    .move-note { background:transparent; color:var(--muted); }
   </style>
 </head>
 <body>
   <div class="app" data-loading="true" aria-busy="true">
     <aside id="sidebar">
       <div class="brand"><span class="mark">M</span><span>简记</span></div>
-      <button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button>
+      <div class="new-actions"><button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button><button class="icon-button" id="new-folder" data-note-action title="新建文件夹" aria-label="新建文件夹"></button></div>
       <input class="note-search" id="note-search" type="search" placeholder="搜索全部笔记" aria-label="搜索全部笔记" autocomplete="off">
       <div class="section-label" id="list-label" aria-live="polite">我的笔记</div>
       <div class="note-list" id="note-list"></div>
-      <div class="empty-list" id="empty-list" hidden>还没有笔记，点上方按钮记下第一条。</div>
+      <div class="empty-list" id="empty-list" hidden>还没有笔记，点上方按钮记下第一条。</div><div id="folder-root-drop" class="folder-root-drop">拖到这里，移出文件夹</div>
     </aside>
     <main>
       <header class="topbar">
         <button class="icon-button mobile-menu" id="mobile-menu" data-note-action aria-label="笔记列表">☰</button>
         <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
         <div class="actions">
+          <button class="save-button move-note" id="move-note" data-note-action title="移动笔记">移动</button>
           <button class="icon-button" id="share-note" data-note-action type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
           <button class="icon-button" id="theme-toggle" type="button" aria-label="切换到黑夜模式" title="切换到黑夜模式"></button>
           <span class="sr-only" id="save-state" role="status" aria-live="polite">未保存</span>
@@ -266,10 +299,12 @@
       <button class="primary" id="save-and-continue">保存并继续</button>
     </div>
   </dialog>
+  <dialog class="unsaved-dialog folder-dialog" id="folder-dialog" aria-labelledby="folder-heading"></dialog>
+  <script src="/folders.js"></script>
   <script src="/editor.bundle.js"></script>
   <script>
 const $ = (selector) => document.querySelector(selector);
-const state = { notes: [], current: null, saving: false, dirty: false, saved: { title: '', content: '' } };
+const state = { notes: [], current: null, folder: '', saving: false, dirty: false, saved: { title: '', content: '' } };
 let loading = true;
 function setLoading(value, message = '正在加载笔记…') {
   loading = value;
@@ -281,6 +316,8 @@ function setLoading(value, message = '正在加载笔记…') {
   $('#editor-pane').inert = value;
   $('#editor-pane').setAttribute('aria-busy', String(value));
   $('#new-note').disabled = value;
+  $('#new-folder').disabled = value;
+  $('#move-note').disabled = value || !state.current;
   $('#note-search').disabled = value;
   $('#note-list').inert = value;
   $('#mobile-menu').disabled = value;
@@ -335,6 +372,7 @@ function markDirty() {
 }
 
 async function refreshNotes() {
+  await refreshFolders();
   state.notes = await api('/api/notes');
   await searchNotes();
 }
@@ -359,13 +397,14 @@ async function searchNotes() {
   const list = $('#note-list');
   list.replaceChildren();
   $('#list-label').textContent = query ? `搜索结果 · ${notes.length}` : '我的笔记';
-  $('#empty-list').hidden = notes.length > 0;
+  $('#empty-list').hidden = notes.length > 0 || (!query && folderState.items.length > 0);
   $('#empty-list').textContent = query ? '没有找到匹配的笔记。' : '还没有笔记，点上方按钮记下第一条。';
-  for (const note of notes) {
+  const makeNote = note => {
     const button = document.createElement('button');
     const date = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(new Date(note.updatedAt));
     button.className = `note-item${note.id === state.current ? ' active' : ''}`;
-    button.innerHTML = `<span class="note-name">${highlightSearch(note.title || '未命名便签', query)}</span>${note.snippet ? `<span class="note-snippet">${highlightSearch(note.snippet, query)}</span>` : ''}<span class="note-date">${date}</span>`;
+    button.innerHTML = `${folderIcon('note')}<span class="note-details"><span class="note-name">${highlightSearch(note.title || '未命名便签', query)}</span>${note.snippet ? `<span class="note-snippet">${highlightSearch(note.snippet, query)}</span>` : ''}<span class="note-date">${date}</span></span>`;
+    bindNoteDrag(button, note);
     button.addEventListener('click', () => openNote(note.id));
     button.addEventListener('contextmenu', async event => {
       event.preventDefault();
@@ -376,8 +415,10 @@ async function searchNotes() {
       menu.style.top = `${Math.min(event.clientY, innerHeight - 100)}px`;
       menu.hidden = false;
     });
-    list.append(button);
-  }
+    return button;
+  };
+  renderFolderList(list, notes, query, makeNote);
+  $('#move-note').disabled = loading || !state.current || state.saving;
 }
 function askUnsaved() {
   return new Promise((resolve) => {
@@ -391,7 +432,7 @@ function askUnsaved() {
   });
 }
 async function allowLeave() {
-  if (state.saving || loading) return false;
+  if (state.saving || loading || folderState.busy) return false;
   if (!state.dirty) return true;
   const choice = await askUnsaved();
   if (choice === 'save') return saveNote();
@@ -402,11 +443,13 @@ async function loadNote(id) {
   const note = await api(`/api/notes/${id}`);
   clearPendingImages();
   state.current = id;
+  state.folder = note.folder || '';
+  if (state.folder) folderState.expanded.add(state.folder);
   $('#delete-note').disabled = false;
   $('#title').value = note.title;
   contentEditor.setValue(note.content, true);
   state.saved = { title: note.title, content: note.content };
-  $('#crumb-title').textContent = note.title;
+  updateFolderCrumb(note.title);
   state.dirty = false;
   setSavedState('已保存');
   await searchNotes();
@@ -427,19 +470,20 @@ async function createNote() {
   if (!await allowLeave()) return;
   clearPendingImages();
   state.current = null;
+  state.folder = '';
   state.dirty = false;
   $('#delete-note').disabled = true;
   await refreshNotes();
   $('#title').value = '';
   contentEditor.setValue('', true);
   state.saved = { title: '', content: '' };
-  $('#crumb-title').textContent = '新便签';
+  updateFolderCrumb('新便签');
   setSavedState('草稿');
   $('#sidebar').classList.remove('open');
   $('#title').focus();
 }
 async function saveNote() {
-  if (state.saving || loading) return false;
+  if (state.saving || loading || folderState.busy) return false;
   if (state.current && !state.dirty) { setSavedState('已保存'); return true; }
   const title = $('#title').value;
   let content = contentEditor.getValue();
@@ -456,7 +500,7 @@ async function saveNote() {
   // the server's cleanup of removed references.
   contentEditor.blur();
   contentEditor.setEditable(false);
-  const controls = ['#title', '#save-note', '#share-note'];
+  const controls = ['#title', '#save-note', '#share-note', '#move-note', '#new-folder'];
   controls.forEach(selector => { $(selector).disabled = true; });
   setSavedState('保存中…');
   try {
@@ -480,13 +524,14 @@ async function saveNote() {
     const url = state.current ? `/api/notes/${state.current}` : '/api/notes';
     const saved = await api(url, options);
     state.current = saved.id;
+    state.folder = saved.folder || '';
     $('#delete-note').disabled = false;
     $('#title').value = saved.title;
     contentEditor.setValue(saved.content);
     state.saved = { title: saved.title, content: saved.content };
     state.dirty = false;
     contentEditor.refreshImages();
-    $('#crumb-title').textContent = saved.title;
+    updateFolderCrumb(saved.title);
     setSavedState('已保存');
     if (saved.cleanupWarning) showNotice(saved.cleanupWarning);
     // A sidebar refresh failure must not misreport a successful note save.
@@ -505,12 +550,13 @@ async function saveNote() {
   }
 }
 async function deleteNote() {
-  if (loading || !state.current || state.saving) return;
+  if (loading || !state.current || state.saving || folderState.busy) return;
   const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
   if (!confirm(message)) return;
   await api(`/api/notes/${state.current}`, { method: 'DELETE' });
   clearPendingImages();
   state.current = null;
+  state.folder = '';
   state.dirty = false;
   $('#delete-note').disabled = true;
   await refreshNotes();
@@ -595,7 +641,7 @@ function setShareBusy(busy) {
   for (const id of ['#create-share', '#revoke-share', '#share-days', '#close-share', '#copy-share']) $(id).disabled = busy;
 }
 async function openShare() {
-  if (loading || state.saving || shareBusy) return;
+  if (loading || state.saving || shareBusy || folderState.busy) return;
   contentEditor.blur();
   shareError('');
   $('#copy-share').textContent = '复制链接';
@@ -700,6 +746,7 @@ document.addEventListener('keydown', (event) => {
 window.addEventListener('beforeunload', (event) => { if (state.dirty || state.saving) { event.preventDefault(); event.returnValue = ''; } });
 async function init() {
   initTheme();
+  if (!$('#new-folder').dataset.initialized) { initFolderUI(); $('#new-folder').dataset.initialized = 'true'; }
   setLoading(true);
   try {
     await refreshNotes();
