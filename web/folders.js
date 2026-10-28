@@ -231,21 +231,9 @@ async function moveNoteToFolder(id, folder) {
     return true;
   } finally { folderState.busy = false; setLoading(false); }
 }
-function openMoveDialog() {
-  if (loading || state.saving || folderState.busy || !state.current || $('#folder-dialog').open) return;
-  const options = [{ name: '', label: '我的笔记（文件夹外）' }, ...folderState.items.map(f => ({ name: f.name, label: f.name + (f.locked ? ' · 需要解锁' : '') }))];
-  const dialog = folderDialogShell('移动笔记', `<label for="folder-destination">移动到</label><select id="folder-destination">${options.map(f => `<option value="${escapeHTML(f.name)}" ${state.folder === f.name ? 'selected' : ''}>${escapeHTML(f.label)}</option>`).join('')}</select>`, '移动');
-  $('#folder-form').onsubmit = async event => {
-    event.preventDefault();
-    const folder = folderState.items.find(f => f.name === $('#folder-destination').value);
-    dialog.close();
-    try { await moveNoteToFolder(state.current, folder); } catch (error) { showNotice(error.message); }
-  };
-}
 function initFolderUI() {
   $('#new-folder').innerHTML = folderIcon('folderplus');
   $('#new-folder').onclick = () => editFolder().catch(error => showNotice(error.message));
-  $('#move-note').onclick = openMoveDialog;
   bindFolderDrop($('#folder-root-drop'), null);
 }
 function clearSortDrag() {

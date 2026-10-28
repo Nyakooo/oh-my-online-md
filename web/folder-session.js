@@ -26,7 +26,7 @@ function resetProtectedEditor(folder, preserveDraft = false) {
     $('#locked-folder-name').textContent = `「${folder}」已锁定`;
     $('#locked-folder-hint').textContent = resume.content !== undefined ? '未保存修改暂存在此窗口内存中，重新解锁后可继续编辑。' : '重新输入密码后继续查看。';
     $('#folder-locked-panel').hidden = false; $('#editor-pane').hidden = true;
-    $('#share-note').disabled = true; $('#save-note').disabled = true; $('#move-note').disabled = true;
+    $('#share-note').disabled = true; $('#save-note').disabled = true;
   }
 }
 async function restoreFolderDraft(folder) {

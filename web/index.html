@@ -240,7 +240,6 @@
     .folder-dialog #folder-error { color:var(--danger); }
     .folder-dialog #folder-show-password, .folder-lock-button { padding:8px 0; background:transparent; color:var(--body-text); border:0; font-size:12px; }
     .folder-dialog button:disabled { opacity:.5; cursor:default; }
-    .move-note { background:transparent; color:var(--muted); }
     .folder-locked-panel { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; color:var(--muted); text-align:center; }
     .folder-locked-panel h2 { color:var(--text); font-size:20px; margin:0; }
     .folder-locked-panel p { max-width:400px; font-size:13px; line-height:1.8; margin:0; }
@@ -265,7 +264,6 @@
         <button class="icon-button mobile-menu" id="mobile-menu" data-note-action aria-label="笔记列表">☰</button>
         <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
         <div class="actions">
-          <button class="save-button move-note" id="move-note" data-note-action title="移动笔记">移动</button>
           <button class="icon-button" id="share-note" data-note-action type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
           <button class="icon-button" id="theme-toggle" type="button" aria-label="切换到黑夜模式" title="切换到黑夜模式"></button>
           <span class="sr-only" id="save-state" role="status" aria-live="polite">未保存</span>

@@ -12,7 +12,6 @@ function setLoading(value, message = '正在加载笔记…') {
   $('#editor-pane').setAttribute('aria-busy', String(value));
   $('#new-note').disabled = value;
   $('#new-folder').disabled = value;
-  $('#move-note').disabled = value || !state.current;
   $('#note-search').disabled = value;
   $('#note-list').inert = value;
   $('#mobile-menu').disabled = value;
@@ -124,7 +123,6 @@ async function searchNotes(options = {}) {
     return button;
   };
   renderFolderList(list, notes, query, makeNote);
-  $('#move-note').disabled = loading || !state.current || state.saving;
 }
 function askUnsaved() {
   return new Promise((resolve) => {
@@ -215,7 +213,7 @@ async function saveNote() {
   // the server's cleanup of removed references.
   contentEditor.blur();
   contentEditor.setEditable(false);
-  const controls = ['#title', '#save-note', '#share-note', '#move-note', '#new-folder'];
+  const controls = ['#title', '#save-note', '#share-note', '#new-folder'];
   controls.forEach(selector => { $(selector).disabled = true; });
   setSavedState('保存中…');
   try {
@@ -273,7 +271,6 @@ async function saveNote() {
     controls.forEach(selector => { $(selector).disabled = false; });
     $('#save-note').disabled = !$('#folder-locked-panel').hidden || Boolean(state.current && !state.dirty);
     $('#share-note').disabled = !$('#folder-locked-panel').hidden;
-    $('#move-note').disabled = !state.current;
   }
 }
 async function deleteNote() {

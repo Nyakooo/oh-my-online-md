@@ -98,7 +98,7 @@ const assert = require('node:assert/strict');
     await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
     const download = page.waitForEvent('download'); await page.getByRole('link', { name: '下载图片', exact: true }).click();
     assert.equal((await download).suggestedFilename(), image.split('/').pop());
-    await page.locator('#move-note').click(); await page.locator('#folder-destination').selectOption(''); await page.locator('#folder-confirm').click();
+    await childRow(children[0].id).dragTo(page.locator('#folder-root-drop'));
     await page.waitForFunction(() => !folderState.busy && !loading && state.folder === '');
     await page.locator('#preview-tab').click();
     await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
