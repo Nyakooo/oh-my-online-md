@@ -2,7 +2,15 @@
 
 Chrome / Edge 的 Manifest V3 扩展。填写自己的简记服务器地址后，通过扩展图标或快捷键打开独立笔记窗口，保留现有文件夹列表、Markdown 编辑器和图片功能。
 
-## 构建与安装
+## 下载与安装
+
+从 [最新 Release](https://github.com/Nyakooo/oh-my-online-md/releases/latest) 下载 `oh-my-online-md-extension_v版本号.zip`，解压后安装，无需本地构建。
+
+Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`，启用“开发者模式”，选择“加载已解压的扩展程序”，选择解压后包含 `manifest.json` 的目录。安装后可将图标固定到工具栏。更新时用新版文件替换该目录，再在扩展管理页点击“重新加载”。
+
+服务器和插件建议使用同一发布版本。服务器升级方式见 [部署文档](deployment.md)。
+
+## 从源码构建
 
 服务器需要先更新到包含 `/api/client/info` 和客户端会话接口的本版本；旧服务器会在连接时提示升级。浏览器至少需要 Chrome 116 或支持对应扩展接口的近期 Edge。
 

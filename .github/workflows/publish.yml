@@ -89,6 +89,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Package browser extension
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck:extension
+          pnpm build:extension
+          mv dist/oh-my-online-md-extension.zip "dist/oh-my-online-md-extension_${RELEASE_TAG}.zip"
       - name: Package Linux binaries
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -99,7 +113,7 @@ jobs:
             tar -czf "dist/online-md_${RELEASE_TAG}_linux_${arch}.tar.gz" online-md LICENSE THIRD_PARTY_NOTICES.md web/editor.LICENSE.txt
           done
           rm online-md
-          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+          (cd dist && sha256sum *.tar.gz *.zip > SHA256SUMS)
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,5 +124,5 @@ jobs:
             --verify-tag \
             --title "$RELEASE_TAG · 简记" \
             --notes-file "docs/releases/${RELEASE_TAG}.md" \
-            dist/*.tar.gz dist/SHA256SUMS \
+            dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
             compose.yaml deploy.sh deploy/nginx.conf docs/images/promo.png

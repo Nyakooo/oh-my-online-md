@@ -50,7 +50,7 @@ function diskImages() {
     await page.locator('#content h2').waitFor();
     assert.equal(await page.locator('#content strong').textContent(), '加粗');
     assert.equal(await page.locator('#content table').count(), 1);
-    assert.equal(await page.locator('.topbar button:visible').count(), 4);
+    assert.equal(await page.locator('.topbar button:visible').count(), 3);
     assert.equal(await page.locator('.editor-toolbar').count(), 1);
     await page.locator('#edit-tab').click();
     assert.equal(await getSource(page), markdown);
@@ -152,7 +152,7 @@ function diskImages() {
     if (diskImages()) assert.deepEqual(diskImages(), []);
 
     assert.equal(await page.locator('.editor-toolbar').count(), 1);
-    assert.equal(await page.locator('.topbar button:visible').count(), 4);
+    assert.equal(await page.locator('.topbar button:visible').count(), 3);
     assert.equal(await page.locator('#notice').isVisible(), false);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
