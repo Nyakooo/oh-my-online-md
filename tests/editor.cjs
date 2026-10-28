@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 async function pasteImage(page) {
+  // Synthetic clipboard events bypass the disabled UI, so wait for editing readiness.
+  await page.waitForFunction(() => !loading && !state.saving && !folderState.busy);
   await page.evaluate(() => contentEditor.focus());
   await page.locator('.cm-content').evaluate(el => {
     const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1sAAAAASUVORK5CYII='), c => c.charCodeAt(0));
@@ -123,6 +125,11 @@ function diskImages() {
     const beforeDiscard = writes.length;
     await pasteImage(page);
     assert.equal(writes.length, beforeDiscard);
+    // The draft label appears before the async sidebar refresh finishes.
+    await page.route('**/api/notes', async route => {
+      if (route.request().method() === 'GET') await new Promise(resolve => setTimeout(resolve, 1000));
+      await route.continue();
+    }, { times: 1 });
     await page.locator('#new-note').click();
     await page.locator('#discard-changes').click();
     await page.waitForFunction(() => document.querySelector('#save-state').textContent === '草稿');
