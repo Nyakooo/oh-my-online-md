@@ -2,6 +2,7 @@
   "name": "oh-my-online-md-editor",
   "private": true,
   "scripts": {
+    "build:icons": "node scripts/build-icons.mjs",
     "build": "node scripts/build-editor.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "typecheck:extension": "tsc -p extension/tsconfig.json",

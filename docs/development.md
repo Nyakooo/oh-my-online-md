@@ -47,6 +47,8 @@ pnpm build
 
 构建会生成 `web/editor.bundle.js` 与 `web/editor.LICENSE.txt`。修改源码或依赖时，应一并提交这两个文件。前端在运行时不从外部 CDN 加载依赖。
 
+Logo 以 `web/favicon.svg` 为统一源。修改后运行 `pnpm build:icons`（需要已安装 Playwright Chromium），生成并提交 `web/favicon.ico` 和 `extension/icons/*.png`；网页与扩展的品牌区域共用此 SVG。
+
 ## 浏览器测试
 
 安装 Chromium 后运行统一入口：
