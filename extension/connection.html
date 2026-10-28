@@ -1,0 +1,16 @@
+<section id="connection-page" class="connection-page" hidden>
+  <form id="connection-form" class="connection-card">
+    <div class="connection-brand"><span>M</span>简记</div>
+    <h1>连接你的简记</h1>
+    <p>输入你的服务器地址，随时打开完整笔记。</p>
+    <label for="server-url">服务器地址</label>
+    <input id="server-url" type="url" placeholder="https://notes.example.com" required autocomplete="url">
+    <label for="server-password">访问密码</label>
+    <div class="connection-password"><input id="server-password" type="password" placeholder="服务器未设置密码时可留空" autocomplete="current-password"><button id="show-server-password" type="button">显示</button></div>
+    <p id="connection-status" role="status"></p>
+    <p id="connection-error" role="alert" hidden></p>
+    <div class="connection-actions"><button type="button" id="test-server">测试连接</button><button type="submit" id="connect-server" class="connection-primary">连接并打开笔记</button></div>
+    <div class="connection-shortcut">快捷键 <kbd id="actual-shortcut">未绑定</kbd><button id="shortcut-settings" type="button">修改</button></div>
+    <div class="connection-bottom"><button type="button" id="back-to-notes" hidden>返回笔记</button><button type="button" id="disconnect-server" hidden>退出登录并移除授权</button></div>
+  </form>
+</section>

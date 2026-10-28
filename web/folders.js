@@ -182,7 +182,7 @@ async function lockFolderUI(folder) {
   try {
     await api(folderURL(folder.name) + '/lock', { method: 'POST' });
     if (state.folder === folder.name) {
-      clearPendingImages(); state.current = null; state.folder = ''; state.dirty = false;
+      clearPendingImages(); window.noteHost?.clearAssets(); state.current = null; state.version = ''; state.folder = ''; state.dirty = false;
       $('#title').value = ''; contentEditor.setValue('', true); state.saved = { title: '', content: '' };
       $('#delete-note').disabled = true; updateFolderCrumb('新便签'); setSavedState('草稿');
       $('#share-dialog').close();

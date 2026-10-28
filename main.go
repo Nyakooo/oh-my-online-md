@@ -21,7 +21,7 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed web/index.html web/folders.js web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
+//go:embed web/index.html web/app.js web/theme-init.js web/folders.js web/editor.bundle.js web/diagrams.bundle.js web/editor.LICENSE.txt web/share.html web/share-theme.js web/login.html web/favicon.svg web/favicon.ico
 var webFiles embed.FS
 
 type app struct {
@@ -29,6 +29,8 @@ type app struct {
 	writeMu           sync.Mutex
 	folderKeyOnce     sync.Once
 	folderKey         []byte
+	clientMu          sync.Mutex
+	clientGrants      map[string]map[string]string
 }
 type note struct {
 	ID             string    `json:"id"`
@@ -37,6 +39,7 @@ type note struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 	DirName        string    `json:"-"`
 	Folder         string    `json:"folder"`
+	Version        string    `json:"version"`
 	CleanupWarning string    `json:"cleanupWarning,omitempty"`
 }
 type noteSummary struct {
@@ -65,6 +68,7 @@ func main() {
 }
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /api/client/session", a.deleteClientSession)
 	mux.HandleFunc("POST /api/preview", a.preview)
 	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)
 	mux.HandleFunc("GET /api/notes/{id}/assets/{name}", a.getImage)
@@ -79,6 +83,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/notes/{id}", a.getNote)
 	mux.HandleFunc("PUT /api/notes/{id}", a.updateNote)
 	mux.HandleFunc("DELETE /api/notes/{id}", a.deleteNote)
+	mux.HandleFunc("GET /app.js", a.serveEditor)
+	mux.HandleFunc("GET /theme-init.js", a.serveEditor)
 	mux.HandleFunc("GET /folders.js", a.serveEditor)
 	mux.HandleFunc("GET /editor.bundle.js", a.serveEditor)
 	mux.HandleFunc("GET /diagrams.bundle.js", a.serveEditor)
@@ -90,6 +96,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/notes/{id}/share", a.deleteShare)
 	// Public links are isolated from the authenticated editor and note APIs.
 	public := http.NewServeMux()
+	public.HandleFunc("GET /api/client/info", a.clientInfo)
+	public.HandleFunc("POST /api/client/session", a.createClientSession)
 	public.HandleFunc("GET /s/{token}/{$}", a.serveShare)
 	public.HandleFunc("GET /s/{token}/assets/{name}", a.serveShareImage)
 	public.HandleFunc("GET /s/{token}", func(w http.ResponseWriter, r *http.Request) {
@@ -186,6 +194,7 @@ func (a *app) newNote(title, content string) (note, error) {
 		}
 	}
 	item.DirName = dirName
+	item.Version = noteVersion(item)
 	if err := a.writeNote(item); err != nil {
 		_ = os.RemoveAll(filepath.Join(a.dataDir, dirName))
 		return note{}, err
@@ -208,6 +217,9 @@ func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !matchNoteVersion(w, r, item) {
+		return
+	}
 	var input struct {
 		Title          string   `json:"title"`
 		Content        string   `json:"content"`
@@ -228,6 +240,7 @@ func (a *app) updateNote(w http.ResponseWriter, r *http.Request) {
 	}
 	item.Content = input.Content
 	item.UpdatedAt = time.Now().UTC()
+	item.Version = noteVersion(item)
 	if err := a.writeNote(item); err != nil {
 		writeError(w, 500, "cannot save note")
 		return
@@ -287,6 +300,7 @@ func (a *app) readNoteFromDir(dirName string) (note, error) {
 	item.Content = string(content)
 	item.DirName = dirName
 	item.Folder = noteFolder(item)
+	item.Version = noteVersion(item)
 	return item, nil
 }
 func (a *app) writeNote(item note) error {
@@ -533,6 +547,12 @@ var imageTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".
 
 func (a *app) serveEditor(w http.ResponseWriter, r *http.Request) {
 	name := "web/editor.bundle.js"
+	if r.URL.Path == "/app.js" {
+		name = "web/app.js"
+	}
+	if r.URL.Path == "/theme-init.js" {
+		name = "web/theme-init.js"
+	}
 	if r.URL.Path == "/folders.js" {
 		name = "web/folders.js"
 	}

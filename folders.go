@@ -142,13 +142,19 @@ func (a *app) folderAllowed(r *http.Request, name string) bool {
 	if !protected {
 		return true
 	}
-	cookie, err := r.Cookie(folderCookieName(name))
-	if err != nil {
-		return false
+	value := ""
+	if clientIdentity(r) != "" {
+		value = a.clientGrant(r, name)
+	} else {
+		cookie, err := r.Cookie(folderCookieName(name))
+		if err != nil {
+			return false
+		}
+		value = cookie.Value
 	}
-	expires, _, ok := strings.Cut(cookie.Value, ".")
+	expires, _, ok := strings.Cut(value, ".")
 	timestamp, err := strconv.ParseInt(expires, 10, 64)
-	return ok && err == nil && timestamp > time.Now().Unix() && hmac.Equal([]byte(cookie.Value), []byte(a.folderToken(name, password, expires)))
+	return ok && err == nil && timestamp > time.Now().Unix() && hmac.Equal([]byte(value), []byte(a.folderToken(name, password, expires)))
 }
 func (a *app) requireFolder(w http.ResponseWriter, r *http.Request, name string) bool {
 	if a.folderAllowed(r, name) {
@@ -192,7 +198,7 @@ func (a *app) listFolders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, folders)
 }
 func decodeFolderInput(w http.ResponseWriter, r *http.Request, input any) bool {
-	if !sameOrigin(r) {
+	if !authorizedMutation(r) {
 		writeError(w, 403, "invalid origin")
 		return false
 	}
@@ -289,6 +295,10 @@ func (a *app) saveFolder(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) setFolderCookie(w http.ResponseWriter, r *http.Request, name string, password []byte) {
 	expires := strconv.FormatInt(time.Now().Add(12*time.Hour).Unix(), 10)
+	if clientIdentity(r) != "" {
+		a.setClientGrant(r, name, a.folderToken(name, password, expires))
+		return
+	}
 	http.SetCookie(w, &http.Cookie{Name: folderCookieName(name), Value: a.folderToken(name, password, expires), Path: "/", HttpOnly: true, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteStrictMode})
 }
 func (a *app) unlockFolder(w http.ResponseWriter, r *http.Request) {
@@ -320,13 +330,18 @@ func (a *app) unlockFolder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (a *app) lockFolder(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
+	if !authorizedMutation(r) {
 		writeError(w, 403, "invalid origin")
 		return
 	}
 	name := r.PathValue("name")
 	if !validFolderName(name) {
 		writeError(w, 400, "无效的文件夹名称")
+		return
+	}
+	if clientIdentity(r) != "" {
+		a.setClientGrant(r, name, "")
+		w.WriteHeader(204)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: folderCookieName(name), Value: "", Path: "/", HttpOnly: true, MaxAge: -1, SameSite: http.SameSiteStrictMode})

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -45,6 +46,20 @@ func sameOrigin(r *http.Request) bool {
 
 func (a *app) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			key := a.clientAuthenticated(r)
+			if key == "" {
+				writeError(w, 401, "客户端登录已失效，请重新连接；未保存内容仍保留")
+				return
+			}
+			if !strings.HasPrefix(r.URL.Path, "/api/") {
+				http.NotFound(w, r)
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), clientContextKey{}, key))
+			next.ServeHTTP(w, r)
+			return
+		}
 		if a.password != "" && !a.authenticated(r) {
 			w.Header().Set("Cache-Control", "no-store")
 			if r.Method == http.MethodGet && r.URL.Path == "/" {

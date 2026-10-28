@@ -5,7 +5,12 @@
 ```text
 main.go                  笔记、图片接口与文件存储
 share.go                 分享快照、有效期与只读访问
-web/index.html           应用界面、保存、主题与分享交互
+web/index.html           网页与扩展共享的界面结构
+web/app.js               保存、主题、分享与编辑交互
+web/folders.js           文件夹列表、拖拽与访问密码交互
+client_auth.go           扩展客户端会话与授权
+extension/               Manifest V3、配置和窗口入口
+scripts/build-extension.mjs  扩展构建与ZIP打包
 web/editor.js            基于 CodeMirror 的行内 Markdown 编辑器
 web/editor.bundle.js     随程序嵌入的前端构建产物
 web/share.html           只读分享页面
@@ -47,12 +52,14 @@ pnpm exec playwright install chromium
 bash scripts/test-browser.sh
 ```
 
-脚本会构建临时二进制，在本地 `10778` 端口依次启动无密码和带测试密码的实例，创建并清理自己的临时数据。开始前确保该端口空闲。
+脚本先检查并构建扩展，然后为每个测试创建独立的临时服务器、动态端口、数据与浏览器配置。也可 `pnpm test:extension` 仅验证扩展。安装和权限边界见 [浏览器扩展](browser-extension.md)。
 
 - `tests/editor.cjs`：行内编辑、自动排版、中文输入法、撤销、图片粘贴、保存、附件清理、失败重试和移动端布局。
 - `tests/save-state.cjs`：未修改时的对号、真实变更判断、恢复原文及避免重复保存。
 - `tests/search.cjs`：标题与正文检索、中文与大小写、匹配高亮、特殊符号、无结果、快捷键、未保存内容保护和移动端搜索。
 - `tests/share.cjs`：匿名只读访问、分享快照、有效期、替换、取消、图片和黑白灰夜间配色。
+- `tests/folders.cjs`：目录、拖拽、密码、重命名、移动与未保存保护。
+- `tests/extension.cjs`：真实 MV3 环境、客户端登录、图片、窗口复用、后台恢复、服务器切换和并发保存。
 
 测试会写入数据，请勿将 `TEST_URL` 或 `TEST_DATA_DIR` 指向真实部署。分享测试会修改测试分享的到期时间，以验证过期行为，不需要等待实际天数。
 

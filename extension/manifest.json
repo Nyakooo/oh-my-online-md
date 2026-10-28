@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "简记 · 浏览器笔记",
+  "version": "1.0.0",
+  "description": "连接自己的简记服务器，通过快捷键打开完整的 Markdown 笔记窗口。",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "action": { "default_title": "打开简记" },
+  "commands": {
+    "open-notes": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+      "description": "打开或聚焦简记笔记窗口"
+    }
+  },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';" }
+}
