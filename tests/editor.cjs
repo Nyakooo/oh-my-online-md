@@ -12,7 +12,7 @@ async function pasteImage(page) {
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
   await page.locator('#preview-tab').click();
-  await page.waitForFunction(() => { const img = document.querySelector('#content img'); return img && img.complete && img.naturalWidth === 1; });
+  await page.waitForFunction(() => { const img = document.querySelector('#content img'); return img?.src.startsWith('blob:') && img.complete && img.naturalWidth === 1; });
 }
 async function getSource(page) { return page.evaluate(() => contentEditor.getValue()); }
 async function setSource(page, text) {
@@ -93,10 +93,12 @@ function diskImages() {
     const savedSource = await getSource(page);
     assert.match(savedSource, /!\[图片\]\(assets\/[a-f0-9]{32}\.png\)/);
     assert.ok(!savedSource.includes('pending/'));
+    // A slow authenticated image must not be mistaken for the 1×1 loading placeholder.
+    await page.route('**/api/notes/*/assets/*', async route => { await new Promise(resolve => setTimeout(resolve, 1000)); await route.continue(); }, { times: 1 });
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
     await page.locator('#preview-tab').click();
-    await page.waitForFunction(() => document.querySelector('#content img')?.naturalWidth === 1);
+    await page.waitForFunction(() => document.querySelector('#content img')?.src.startsWith('blob:') && document.querySelector('#content img').naturalWidth === 1);
     assert.equal(await getSource(page), savedSource);
     assert.match(await page.locator('#content img').getAttribute('src'), /^blob:/);
     const imageURL = '/api/notes/' + await page.evaluate(() => state.current) + '/' + savedSource.match(/assets\/[a-f0-9]{32}\.png/)[0];

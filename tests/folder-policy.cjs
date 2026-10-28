@@ -68,7 +68,7 @@ const assert = require('node:assert/strict');
     assert.equal(await page.evaluate(() => contentEditor.getValue()), draft);
     assert.equal(await page.evaluate(() => pendingImages.size), 1);
     await page.locator('#preview-tab').click();
-    await page.waitForFunction(() => document.querySelector('#preview-panel img')?.naturalWidth === 1);
+    await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
     await rootRow(roots[0].id).click(); await page.locator('#unsaved-dialog[open]').waitFor(); await page.locator('#cancel-navigation').click();
     assert.equal(await page.locator('#title').inputValue(), '自动锁定前未保存');
     await rootRow(roots[0].id).click(); await page.locator('#discard-changes').click();

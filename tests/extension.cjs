@@ -67,7 +67,7 @@ const path = require('node:path');
     await page.locator('#save-note').click();
     await page.locator('#save-note[data-state="saved"]').waitFor();
     await page.locator('#preview-tab').click();
-    await page.waitForFunction(() => document.querySelector('#preview-panel img')?.naturalWidth === 1);
+    await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
     assert.match(await page.locator('#preview-panel img').getAttribute('src'), /^blob:chrome-extension:/);
     // A failed save leaves the current draft available for retry.
     await page.locator('#edit-tab').click();
