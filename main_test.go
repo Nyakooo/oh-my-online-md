@@ -183,29 +183,3 @@ func TestSaveCleansFailedAttemptButPreservesOtherUploads(t *testing.T) {
 		t.Fatal("invalid candidate escaped assets directory", err)
 	}
 }
-
-func TestDeleteNoteVersionConflict(t *testing.T) {
-	a := &app{dataDir: t.TempDir()}
-	n, err := a.newNote("original", "preserve me")
-	if err != nil {
-		t.Fatal(err)
-	}
-	remove := func(version string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("DELETE", "/", nil)
-		r.SetPathValue("id", n.ID)
-		r.Header.Set("If-Match", "\""+version+"\"")
-		w := httptest.NewRecorder()
-		a.deleteNote(w, r)
-		return w
-	}
-	if w := remove("stale"); w.Code != http.StatusPreconditionFailed {
-		t.Fatalf("stale delete: %d", w.Code)
-	}
-	current, err := a.readNote(n.ID)
-	if err != nil || current.Content != "preserve me" {
-		t.Fatalf("stale delete changed note: %v", err)
-	}
-	if w := remove(current.Version); w.Code != http.StatusNoContent {
-		t.Fatalf("current delete: %d %s", w.Code, w.Body.String())
-	}
-}

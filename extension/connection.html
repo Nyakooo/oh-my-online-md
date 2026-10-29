@@ -6,10 +6,6 @@
     <div class="connection-actions"><button type="button" id="use-local">打开本地笔记（无需服务器）</button></div>
     <p>本地空间上限 200 MiB，单张图片最多 10 MiB；不支持公开分享和文件夹密码。卸载插件会丢失本地数据，请定期备份。</p>
     <div class="connection-actions"><button type="button" id="export-local">导出本地完整备份</button><button type="button" id="import-local">导入本地备份（追加）</button></div><input type="file" id="local-backup-file" accept=".json,application/json" hidden>
-    <div class="connection-actions"><button type="button" id="open-server-import">选择本地笔记导入已连接的服务器</button></div>
-    <div class="connection-actions"><button type="button" id="toggle-server-sync">启用服务器离线同步</button><button type="button" id="sync-now" hidden>立即同步</button></div>
-    <p>启用后仅缓存普通笔记，断网仍可保存；联网后自动同步，双方修改保留冲突副本。密码文件夹和公开分享请切回直接在线模式使用。</p>
-    <button type="button" id="export-server-cache" hidden>导出此服务器缓存备份</button><p id="sync-status" role="status" hidden></p>
     <label for="server-url">服务器地址</label>
     <input id="server-url" type="url" placeholder="https://notes.example.com" required autocomplete="url">
     <label for="server-password">访问密码</label>
@@ -21,13 +17,3 @@
     <div class="connection-bottom"><button type="button" id="back-to-notes" hidden>返回笔记</button><button type="button" id="disconnect-server" hidden>退出登录并移除授权</button></div>
   </form>
 </section>
-
-<dialog id="server-import-dialog" class="server-import-dialog" aria-labelledby="server-import-heading">
-  <h2 id="server-import-heading">导入本地笔记到服务器</h2>
-  <p>目标：<strong id="server-import-target"></strong></p>
-  <p>仅导入打开此窗口时已保存的版本，不包含未保存的编辑。服务器同名文件夹会合并，受保护的同名文件夹会拒绝导入。本地修改后再次导入会创建新副本，不更新先前导入的笔记。</p>
-  <label class="server-import-choice"><input type="checkbox" id="select-all-import">全选本地笔记</label>
-  <div id="server-import-list"></div>
-  <p id="server-import-status" role="status"></p>
-  <div class="connection-actions"><button type="button" id="close-server-import">关闭</button><button type="button" id="confirm-server-import" disabled>导入所选</button></div>
-</dialog>

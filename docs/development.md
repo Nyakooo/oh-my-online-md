@@ -66,7 +66,6 @@ bash scripts/test-browser.sh
 - `tests/share.cjs`：匿名只读访问、分享快照、有效期、替换、取消、图片和黑白灰夜间配色。
 - `tests/folders.cjs`：目录、拖拽、密码、重命名、移动与未保存保护。
 - `tests/folder-policy.cjs`：根笔记与目录排序、持久化、窗口锁定、闲置及草稿图片恢复。
-- `tests/server-import.cjs`：IndexedDB 旧版本升级、明确选择范围、图片导入、响应丢失后重启重试、去重、本地原件保留及服务器隔离。
 - `tests/offline.cjs`：真实 MV3 离线存储、图片、浏览器重启、文件夹重命名和排序、版本冲突、完整备份及原子导入。
 - `tests/extension.cjs`：真实 MV3 环境、客户端登录、图片、窗口复用、后台恢复、服务器切换和并发保存。
 
@@ -90,6 +89,3 @@ git push origin master v1.0.0
 GitHub Actions 会先验证项目，再发布 GHCR 多架构镜像。标签构建成功后创建 GitHub Release，附带 Linux 二进制、校验和、Compose 配置、Nginx 示例与宣传图。发布结果应同时检查 Actions、Release 资产及 GHCR 标签。
 
 GHCR 包应允许匿名拉取。若首次发布的包为 Private，维护者需要在 GitHub Packages 的包设置中调整可见性。
-
-
-服务器离线同步由 `extension/server-sync.ts` 和 `sync_notes.go` 实现。`node tests/run-browser.cjs server-sync` 使用真实 MV3 插件、临时浏览器配置和两个隔离服务器验证断网重启、队列恢复、冲突及服务器隔离；完整浏览器回归包含 14 组。`go test -race ./...` 包含服务端 CAS、幂等回执、事务恢复和附件保留检查。

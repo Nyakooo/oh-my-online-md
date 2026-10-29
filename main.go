@@ -53,35 +53,18 @@ type noteMetadata struct {
 }
 
 func main() {
-	dataDir, err := filepath.Abs(env("DATA_DIR", "./data"))
-	if err != nil {
-		log.Fatalf("resolve data directory: %v", err)
-	}
+	dataDir := env("DATA_DIR", "./data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		log.Fatalf("create data directory: %v", err)
 	}
-	if err := cleanupImportStages(dataDir); err != nil {
-		log.Fatalf("clean incomplete imports: %v", err)
-	}
 	a := &app{dataDir: dataDir, password: os.Getenv("PASSWORD")}
-	if err := a.recoverSyncJournals(); err != nil {
-		log.Fatalf("recover sync transactions: %v", err)
-	}
 	port := env("PORT", "10777")
-	server := &http.Server{Addr: env("HOST", "") + ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("online-md listening on %s (data: %s)", server.Addr, dataDir)
+	server := &http.Server{Addr: ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
+	log.Printf("online-md listening on :%s (data: %s)", port, dataDir)
 	log.Fatal(server.ListenAndServe())
 }
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/sync", a.syncManifest)
-	mux.HandleFunc("GET /api/sync/notes/{id}", a.syncReadNote)
-	mux.HandleFunc("GET /api/sync/notes/{id}/assets/{name}", a.syncReadAsset)
-	mux.HandleFunc("PUT /api/sync/notes/{id}", a.syncWriteNote)
-	mux.HandleFunc("DELETE /api/sync/notes/{id}", a.syncWriteNote)
-	mux.HandleFunc("PUT /api/sync/structure", a.syncWriteStructure)
-	mux.HandleFunc("GET /api/import/info", a.importInfo)
-	mux.HandleFunc("POST /api/import/notes/{id}", a.importNote)
 	mux.HandleFunc("DELETE /api/client/session", a.deleteClientSession)
 	mux.HandleFunc("POST /api/preview", a.preview)
 	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)
@@ -280,9 +263,6 @@ func (a *app) deleteNote(w http.ResponseWriter, r *http.Request) {
 	defer a.writeMu.Unlock()
 	item, ok := a.requestNote(w, r)
 	if !ok {
-		return
-	}
-	if !matchNoteVersion(w, r, item) {
 		return
 	}
 	if err := os.RemoveAll(filepath.Join(a.dataDir, item.DirName)); err != nil {

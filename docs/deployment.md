@@ -63,7 +63,7 @@ Compose 读取 `.env` 中的 `DATA_DIR`、`PASSWORD` 与 `IMAGE_TAG`。宿主机
 sudo cp deploy/nginx.conf /etc/nginx/conf.d/online-md.conf
 ```
 
-替换示例域名 `notes.example.com`，保留 `client_max_body_size 232m;`（用于带图片的整篇本地导入；普通笔记 JSON 请求仍由后端限制为 32 MiB）。已有 HTTPS 站点将相应代理配置合并进实际 `listen 443 ssl` 的 `server` 中。
+替换示例域名 `notes.example.com`，保留 `client_max_body_size 32m;`。已有 HTTPS 站点将相应代理配置合并进实际 `listen 443 ssl` 的 `server` 中。
 
 ```sh
 sudo nginx -t
@@ -119,30 +119,3 @@ DATA_DIR=./data PASSWORD='replace-with-your-password' PORT=10777 ./online-md
 ```
 
 关闭终端不会替代进程管理；长期运行可按自己的部署方式接入 systemd 或其他进程管理器。
-
-
-### 仅供本机插件使用
-
-二进制程序可以直接在本机运行，无需 Docker 或独立服务器：
-
-```sh
-HOST=127.0.0.1 ./online-md
-```
-
-插件服务器地址填写 `http://127.0.0.1:10777`。程序默认在**启动时的工作目录**下创建 `data` 目录，而不是固定使用二进制所在目录；启动日志显示数据目录的绝对路径。可用 `DATA_DIR` 指定其他路径。
-
-`HOST` 控制监听地址，默认空值（监听所有网络接口，保持现有部署兼容）；仅本机使用时设置为 `127.0.0.1`。Docker 容器内需继续监听所有接口。
-
-
-### 本地笔记导入
-
-本版本后端支持插件选择本地笔记后单向导入。整篇导入请求最多 232 MiB，正文最多 16 MiB、单图最多 10 MiB；使用旧版反向代理配置时，需将 `client_max_body_size` 调整为 `232m`，否则附件较多的笔记可能收到 413。
-
-服务器首次使用导入功能时，会在数据目录创建 `.server-id`，请随数据一起备份和恢复。这是导入目标的持久身份，不是密码或访问凭证。每篇导入笔记目录内的 `.import-digest` 用于识别安全重试，应随笔记保留。中断请求的暂存目录不可见，正常失败会清理，服务重启时会清理遗留的 `.import-数字` 暂存目录。
-
-
-### 离线同步数据维护
-
-服务器离线同步使用 `/api/sync`、`/api/sync/notes/{id}`、附件子路径及 `/api/sync/structure`，沿用服务器会话验证。反向代理须允许 PUT、DELETE 和 multipart 上传，保留 `If-Match`、`X-Sync-Operation` 请求头。现有 Nginx 示例的 232m 请求上限支持整篇笔记与图片事务。
-
-备份完整 data 目录，包括 `.server-id`、`.sync-receipts` 和任何 `.sync-journal-*`。服务器身份用于防止缓存误连其他实例，回执用于安全重试，事务日志用于启动恢复；不要手工清理这些文件或只恢复部分目录。建议停止进程后备份，恢复时保留原服务器身份。未发布的同步事务在下次启动恢复后再接受请求。

@@ -12,8 +12,29 @@ const path = require('node:path');
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const url = 'chrome-extension://' + new URL(worker.url()).host + '/app.html';
     const page = await context.newPage(); await page.goto(url);
+    // Existing v3 installations must remain readable after server sync is removed.
+    await page.evaluate(async () => {
+      await new Promise((resolve, reject) => {
+        const request = indexedDB.open('jianji-local', 3);
+        request.onupgradeneeded = () => {
+          for (const [name, keyPath] of [['notes','id'],['folders','name'],['assets','key'],['imports','key'],['sync','id'],['meta','key']]) request.result.createObjectStore(name, { keyPath });
+        };
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result, tx = db.transaction('notes', 'readwrite');
+          tx.objectStore('notes').put({ id: 'd'.repeat(32), title: '已有本地笔记', content: '保留已有内容', folder: '', updatedAt: new Date().toISOString(), version: 'e'.repeat(32) });
+          tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => reject(tx.error);
+        };
+      });
+    });
     await page.locator('#use-local').click();
     await page.locator('#loading-panel').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#title').inputValue(), '已有本地笔记');
+    assert.equal(await page.locator('#sync-now, #toggle-server-sync, #import-to-server').count(), 0);
+    await page.evaluate(async () => {
+      await api('/api/notes/' + 'd'.repeat(32), { method: 'DELETE', headers: { 'If-Match': '"' + 'e'.repeat(32) + '"' } });
+      await init();
+    });
     await context.setOffline(true);
     await page.locator('#title').fill('离线笔记');
     await page.locator('.cm-content').fill('断网保存的内容');
