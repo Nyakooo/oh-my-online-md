@@ -69,7 +69,6 @@
     input[type="checkbox"] { accent-color: var(--accent); }
     .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: min(100%, 1680px); height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
     aside { display: flex; min-width: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
-    .brand { display: flex; align-items: center; gap: 10px; padding: 0 9px; color: var(--text); font-size: 16px; font-weight: 650; letter-spacing: -.035em; }
     .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
     .new-note:hover { filter: brightness(.97); }
     .plus { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--plus-ink); font-size: 16px; line-height: 1; }
@@ -206,7 +205,7 @@
     }
     @media (max-width: 390px) { .editor-pane { padding-right: 18px; padding-left: 18px; } }
 
-    .new-actions { display:flex; align-items:center; gap:8px; margin:27px 0; }
+    .new-actions { display:flex; align-items:center; gap:8px; margin:0 0 27px; }
     .new-actions .new-note { margin:0; flex:1; }
     #new-folder { flex:none; width:35px; height:35px; color:var(--body-text); }
     .folder-icon { width:17px; height:17px; flex:none; vertical-align:middle; }
@@ -250,7 +249,6 @@
 <body>
   <div class="app" data-loading="true" aria-busy="true">
     <aside id="sidebar">
-      <div class="brand"><span>简记</span></div>
       <div class="new-actions"><button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button><button class="icon-button" id="new-folder" data-note-action title="新建文件夹" aria-label="新建文件夹"></button></div>
       <input class="note-search" id="note-search" type="search" placeholder="搜索全部笔记" aria-label="搜索全部笔记" autocomplete="off">
       <div class="section-label" id="list-label" aria-live="polite">我的笔记</div>
