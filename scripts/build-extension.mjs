@@ -1,10 +1,12 @@
 import { build } from 'esbuild';
+import { version } from './check-version.mjs';
 import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 await import('./build-editor.mjs');
 const out = 'dist/extension';
+const archive = `oh-my-online-md-extension_v${version}.zip`;
 await rm(out, { recursive: true, force: true });
-await rm('dist/oh-my-online-md-extension.zip', { force: true });
+await rm(`dist/${archive}`, { force: true });
 await mkdir(out, { recursive: true });
 for (const file of ['editor.bundle.js', 'diagrams.bundle.js', 'editor.LICENSE.txt', 'app.js', 'note-assets.js', 'folder-session.js', 'folders.js', 'theme-init.js', 'favicon.svg', 'favicon.ico']) await cp('web/' + file, out + '/' + file);
 let html = await readFile('web/index.html', 'utf8');
@@ -24,6 +26,6 @@ await cp('LICENSE', out + '/LICENSE');
 await cp('docs/browser-extension.md', out + '/README.md');
 await cp('THIRD_PARTY_NOTICES.md', out + '/THIRD_PARTY_NOTICES.md');
 // Use the system zip utility when available; the unpacked build is always usable.
-try { execFileSync('zip', ['-q', '-r', '../oh-my-online-md-extension.zip', '.'], { cwd: out }); }
+try { execFileSync('zip', ['-q', '-r', `../${archive}`, '.'], { cwd: out }); }
 catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('zip 不可用；扩展构建目录已生成。'); }
 console.log('Extension ready: dist/extension');

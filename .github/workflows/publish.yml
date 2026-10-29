@@ -27,6 +27,10 @@ jobs:
           version: 11.25.0
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check release version consistency
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: pnpm check:version
       - name: Verify bundled editor
         run: |
           pnpm build
@@ -102,7 +106,6 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm typecheck:extension
           pnpm build:extension
-          mv dist/oh-my-online-md-extension.zip "dist/oh-my-online-md-extension_${RELEASE_TAG}.zip"
       - name: Package Linux binaries
         env:
           RELEASE_TAG: ${{ github.ref_name }}

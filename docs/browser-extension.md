@@ -23,7 +23,7 @@ pnpm build:extension
 构建生成：
 
 - `dist/extension/`：可直接加载的扩展目录。
-- `dist/oh-my-online-md-extension.zip`：可分发的 ZIP（构建环境需要 `zip` 工具）。
+- `dist/oh-my-online-md-extension_v版本号.zip`：可分发的 ZIP（构建环境需要 `zip` 工具）。
 
 Chrome 打开 `chrome://extensions/`，Edge 打开 `edge://extensions/`，启用“开发者模式”，选择“加载已解压的扩展程序”，选择 `dist/extension` 目录。若收到 ZIP，先解压，再选择其中包含 `manifest.json` 的目录。首次加载后可将扩展图标固定到工具栏。
 
