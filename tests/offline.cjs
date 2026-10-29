@@ -20,6 +20,29 @@ const path = require('node:path');
     await page.locator('#image-input').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1sAAAAASUVORK5CYII=', 'base64') });
     await page.locator('#save-note').click(); await page.locator('#save-note[data-state="saved"]').waitFor();
     const noteID = await page.evaluate(() => state.current);
+    const boundaries = await page.evaluate(async id => {
+      const tooLargeImage = await noteRequest('/api/notes/' + id + '/assets', { method: 'POST', body: new Blob([new Uint8Array(10 * 1024 * 1024 + 1)], { type: 'image/png' }) });
+      const tooLargeNote = await noteRequest('/api/notes/' + id, { method: 'PUT', body: JSON.stringify({ title: 'must not save', content: 'x'.repeat(16 * 1024 * 1024 + 1) }) });
+      return { image: tooLargeImage.status, note: tooLargeNote.ok, saved: await api('/api/notes/' + id) };
+    }, noteID);
+    assert.equal(boundaries.image, 413); assert.equal(boundaries.note, false); assert.equal(boundaries.saved.title, '离线笔记');
+    const quota = await page.evaluate(async () => {
+      const draft = await api('/api/notes', { method: 'POST', body: JSON.stringify({ title: 'quota fixture', content: '' }) });
+      const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1sAAAAASUVORK5CYII='), c => c.charCodeAt(0));
+      const image = new Blob([png, new Uint8Array(10 * 1024 * 1024 - png.length)], { type: 'image/png' });
+      let successful = 0, rejected;
+      for (let i = 0; i < 20; i++) {
+        const response = await noteRequest('/api/notes/' + draft.id + '/assets', { method: 'POST', body: image });
+        if (response.status === 413) { rejected = response.status; break; }
+        if (!response.ok) throw new Error('quota fixture failed');
+        successful++;
+      }
+      await api('/api/notes/' + draft.id, { method: 'DELETE', headers: { 'If-Match': '"' + draft.version + '"' } });
+      return { successful, rejected, remaining: (await api('/api/notes')).length };
+    });
+    assert.deepEqual(quota, { successful: 19, rejected: 413, remaining: 1 }, '200 MiB aggregate limit preserves existing notes');
+
+
     await page.reload(); await page.locator('#loading-panel').waitFor({ state: 'hidden' });
     assert.equal(await page.locator('#title').inputValue(), '离线笔记');
     await page.locator('#preview-tab').click();
@@ -64,6 +87,14 @@ const path = require('node:path');
     assert.equal(await page.evaluate(async () => (await api('/api/notes')).length), 2);
     const imported = await page.evaluate(async id => (await api('/api/notes')).find(n => n.id !== id), noteID);
     assert.equal(imported.folder, '重命名目录');
+    const restored = await page.evaluate(async id => {
+      const note = await api('/api/notes/' + id);
+      const name = note.content.match(/assets\/([a-f0-9]{32}\.png)/)[1];
+      const response = await noteRequest('/api/notes/' + id + '/assets/' + name);
+      return { ok: response.ok, bytes: (await response.blob()).size };
+    }, imported.id);
+    assert.deepEqual(restored, { ok: true, bytes: 68 });
+
     const invalid = { ...data, assets: [{ key: data.assets[0].key, data: 'https://invalid.example/track' }] };
     await page.locator('#local-backup-file').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid)) });
     await page.getByText('备份附件无效', { exact: true }).waitFor();

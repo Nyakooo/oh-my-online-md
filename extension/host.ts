@@ -1,3 +1,4 @@
+import { openServerImport } from './server-import';
 import { localRequest, exportLocal, importLocal } from './local-store';
 interface Connection { baseURL: string; token: string; expiresAt: string }
 declare const state: { current: string | null; folder: string; dirty: boolean; saving: boolean; version: string; saved: { title: string; content: string }; notes: unknown[] };
@@ -117,6 +118,14 @@ function resetWorkspace() {
   $<HTMLInputElement>('#note-search').value = '';
 }
 function initConnectionUI() {
+  $('#open-server-import').onclick = async () => {
+    if (state.saving || formBusy) return;
+    const owner = connection;
+    if (!owner?.token) { errorMessage(new Error('请先连接目标服务器，再打开导入窗口')); return; }
+    busy(true);
+    try { await openServerImport(owner, () => connection === owner, async () => { if (!localMode) await refreshNotes(); }); }
+    catch (error) { errorMessage(error); } finally { busy(false); }
+  };
   $('#use-local').onclick = async () => {
     if (state.saving || formBusy) return;
     if (configured && state.dirty && !await allowLeave()) return;

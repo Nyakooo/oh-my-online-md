@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const net = require('node:net');
 const { once } = require('node:events');
-const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'folder-policy', 'extension', 'offline'];
+const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'folder-policy', 'extension', 'offline', 'server-import'];
 async function freePort() {
   const server = net.createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
@@ -31,11 +31,11 @@ async function startServer(binary, directory, password) {
   execFileSync('go', ['build', '-o', binary, '.'], { stdio: 'inherit' });
   try {
     for (const suite of run) {
-      const password = ['share', 'extension'].includes(suite) ? 'test-password' : '';
+      const password = ['share', 'extension', 'server-import'].includes(suite) ? 'test-password' : '';
       const server = await startServer(binary, path.join(work, suite), password);
       let second;
       try {
-        if (suite === 'extension') second = await startServer(binary, path.join(work, suite + '-second'), password);
+        if (['extension', 'server-import'].includes(suite)) second = await startServer(binary, path.join(work, suite + '-second'), password);
         const child = spawn(process.execPath, ['tests/' + suite + '.cjs'], { stdio: 'inherit', env: { ...process.env, TEST_URL: server.url, TEST_DATA_DIR: server.directory, TEST_PASSWORD: password, SECOND_TEST_URL: second?.url || '' } });
         const [code] = await once(child, 'exit'); if (code !== 0) throw new Error(suite + ' failed');
       } finally {

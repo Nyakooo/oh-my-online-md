@@ -60,6 +60,9 @@ func main() {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		log.Fatalf("create data directory: %v", err)
 	}
+	if err := cleanupImportStages(dataDir); err != nil {
+		log.Fatalf("clean incomplete imports: %v", err)
+	}
 	a := &app{dataDir: dataDir, password: os.Getenv("PASSWORD")}
 	port := env("PORT", "10777")
 	server := &http.Server{Addr: env("HOST", "") + ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
@@ -68,6 +71,8 @@ func main() {
 }
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/import/info", a.importInfo)
+	mux.HandleFunc("POST /api/import/notes/{id}", a.importNote)
 	mux.HandleFunc("DELETE /api/client/session", a.deleteClientSession)
 	mux.HandleFunc("POST /api/preview", a.preview)
 	mux.HandleFunc("POST /api/notes/{id}/assets", a.uploadImage)

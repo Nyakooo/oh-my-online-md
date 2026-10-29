@@ -1,8 +1,8 @@
 // A transaction is the unit of a local edit: concurrent windows cannot overwrite
 // a newer revision after reading an older one.
-type LocalNote = { id: string; title: string; content: string; folder: string; updatedAt: string; version: string; rank?: number };
+export type LocalNote = { id: string; title: string; content: string; folder: string; updatedAt: string; version: string; rank?: number };
 type LocalFolder = { name: string; protected: false; locked: false; rank?: number };
-type Asset = { key: string; blob: Blob };
+export type Asset = { key: string; blob: Blob };
 const LIMIT = 200 * 1024 * 1024;
 const id = () => crypto.randomUUID().replaceAll('-', '');
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -10,19 +10,22 @@ const read = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => 
 let database: Promise<IDBDatabase> | undefined;
 function open() {
   return database ||= new Promise((resolve, reject) => {
-    const request = indexedDB.open('jianji-local', 1);
+    const request = indexedDB.open('jianji-local', 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore('notes', { keyPath: 'id' });
-      request.result.createObjectStore('folders', { keyPath: 'name' });
-      request.result.createObjectStore('assets', { keyPath: 'key' });
+      for (const [name, keyPath] of [['notes', 'id'], ['folders', 'name'], ['assets', 'key'], ['imports', 'key']]) {
+        if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, { keyPath });
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => { request.result.close(); database = undefined; };
+      resolve(request.result);
+    };
     request.onerror = () => { database = undefined; reject(request.error); };
   });
 }
 async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => Promise<T>) {
   const db = await open();
-  const tx = db.transaction(['notes', 'folders', 'assets'], mode);
+  const tx = db.transaction(['notes', 'folders', 'assets', 'imports'], mode);
   const done = new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error || new Error('本地保存已取消')); tx.onerror = () => {}; });
   try { const result = await action(tx); await done; return result; }
   catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
@@ -164,4 +167,25 @@ export async function importLocal(file: File) {
     for (const asset of assets) tx.objectStore('assets').add(asset);
   });
   return notes.length;
+}
+
+
+export async function localSnapshot() {
+  return transaction('readonly', async tx => ({
+    notes: await read<LocalNote[]>(tx.objectStore('notes').getAll()),
+    assets: await read<Asset[]>(tx.objectStore('assets').getAll())
+  }));
+}
+export type ImportProgress = { key: string; remoteID: string; done: boolean };
+export async function importProgress(key: string): Promise<ImportProgress> {
+  return transaction('readwrite', async tx => {
+    const store = tx.objectStore('imports');
+    const existing = await read<ImportProgress | undefined>(store.get(key));
+    if (existing) return existing;
+    const progress = { key, remoteID: id(), done: false };
+    store.add(progress); return progress;
+  });
+}
+export async function finishImport(progress: ImportProgress) {
+  await transaction('readwrite', async tx => { tx.objectStore('imports').put({ ...progress, done: true }); });
 }
