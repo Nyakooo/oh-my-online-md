@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const net = require('node:net');
 const { once } = require('node:events');
-const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'folder-policy', 'extension', 'offline'];
+const suites = ['loading', 'save-state', 'search', 'editor', 'media', 'share', 'share-theme', 'large-note', 'folders', 'folder-policy', 'extension', 'offline', 'storage'];
 async function freePort() {
   const server = net.createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
@@ -31,7 +31,7 @@ async function startServer(binary, directory, password) {
   execFileSync('go', ['build', '-o', binary, '.'], { stdio: 'inherit' });
   try {
     for (const suite of run) {
-      const password = ['share', 'extension'].includes(suite) ? 'test-password' : '';
+      const password = ['share', 'extension', 'storage'].includes(suite) ? 'test-password' : '';
       const server = await startServer(binary, path.join(work, suite), password);
       let second;
       try {

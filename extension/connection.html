@@ -3,8 +3,17 @@
     <div class="connection-brand">简记</div>
     <h1>选择使用方式</h1>
     <p>直接在浏览器保存笔记，或连接服务器。两种模式的数据独立保存。</p>
+    <section id="storage-panel" class="storage-panel" aria-label="离线存储空间" hidden>
+      <p id="storage-summary" role="status">尚未选择使用模式</p>
+      <progress id="storage-progress" max="1" value="0" aria-label="离线空间使用比例"></progress>
+      <div id="local-quota-settings">
+        <label for="local-limit">离线空间上限（MiB）</label>
+        <div class="storage-limit-row"><input id="local-limit" type="number" min="1" step="1" value="200"><button id="save-local-limit" type="button">保存上限</button></div>
+        <p>默认 200 MiB，可自行调整；实际可用空间仍受磁盘和浏览器环境影响。</p>
+      </div>
+    </section>
     <div class="connection-actions"><button type="button" id="use-local">打开本地笔记（无需服务器）</button></div>
-    <p>本地空间上限 200 MiB，单张图片最多 10 MiB；不支持公开分享和文件夹密码。卸载插件会丢失本地数据，请定期备份。</p>
+    <p>本地空间上限可配置，单张图片最多 10 MiB；不支持公开分享和文件夹密码。卸载插件会丢失本地数据，请定期备份。</p>
     <div class="connection-actions"><button type="button" id="export-local">导出本地完整备份</button><button type="button" id="import-local">导入本地备份（追加）</button></div><input type="file" id="local-backup-file" accept=".json,application/json" hidden>
     <label for="server-url">服务器地址</label>
     <input id="server-url" type="url" placeholder="https://notes.example.com" required autocomplete="url">

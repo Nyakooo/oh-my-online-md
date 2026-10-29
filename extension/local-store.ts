@@ -3,17 +3,17 @@
 type LocalNote = { id: string; title: string; content: string; folder: string; updatedAt: string; version: string; rank?: number };
 type LocalFolder = { name: string; protected: false; locked: false; rank?: number };
 type Asset = { key: string; blob: Blob };
-const LIMIT = 200 * 1024 * 1024;
+const DEFAULT_LIMIT = 200 * 1024 * 1024;
 const id = () => crypto.randomUUID().replaceAll('-', '');
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 const read = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
 let database: Promise<IDBDatabase> | undefined;
 function open() {
   return database ||= new Promise((resolve, reject) => {
-    // Keep v3 compatibility with existing installations; never downgrade or erase notes.
-    const request = indexedDB.open('jianji-local', 3);
+    // Upgrade existing libraries in place; preserve notes and abandoned legacy stores.
+    const request = indexedDB.open('jianji-local', 4);
     request.onupgradeneeded = () => {
-      for (const [name, keyPath] of [['notes', 'id'], ['folders', 'name'], ['assets', 'key']]) {
+      for (const [name, keyPath] of [['notes', 'id'], ['folders', 'name'], ['assets', 'key'], ['settings', 'key']]) {
         if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, { keyPath });
       }
     };
@@ -26,7 +26,7 @@ function open() {
 }
 async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => Promise<T>) {
   const db = await open();
-  const tx = db.transaction(['notes', 'folders', 'assets'], mode);
+  const tx = db.transaction(['notes', 'folders', 'assets', 'settings'], mode);
   const done = new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error || new Error('本地保存已取消')); tx.onerror = () => {}; });
   try { const result = await action(tx); await done; return result; }
   catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
@@ -47,12 +47,29 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
   const method = options.method || 'GET';
   const mutating = method !== 'GET';
   try {
-    return await transaction(mutating ? 'readwrite' : 'readonly', async tx => {
+    return await transaction(mutating || parts[1] === 'storage' ? 'readwrite' : 'readonly', async tx => {
+      const settings = tx.objectStore('settings');
+      const limit = (await read<{ bytes: number } | undefined>(settings.get('limit')))?.bytes || DEFAULT_LIMIT;
+      const overLimit = () => json({ error: `本地空间超过 ${limit / 1024 / 1024} MiB，请导出备份、清理附件或调整上限` }, 413);
+      const response = await (async () => {
+      if (parts[1] === 'storage' && method === 'GET') {
+        const cached = await read<{ bytes: number } | undefined>(settings.get('usage'));
+        if (cached) return json({ usedBytes: cached.bytes, limitBytes: limit });
+      }
       const ns = tx.objectStore('notes'), fs = tx.objectStore('folders'), as = tx.objectStore('assets');
       const notes = (await read<LocalNote[]>(ns.getAll())).sort((a, b) => (a.rank ?? -Date.parse(a.updatedAt)) - (b.rank ?? -Date.parse(b.updatedAt)));
       const folders = (await read<LocalFolder[]>(fs.getAll())).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0) || a.name.localeCompare(b.name));
       const assets = await read<Asset[]>(as.getAll());
       const input = typeof options.body === 'string' ? JSON.parse(options.body) : {};
+      if (parts[1] === 'storage') {
+        const usedBytes = size(notes, assets);
+        if (method === 'GET') { settings.put({ key: 'usage', bytes: usedBytes }); return json({ usedBytes, limitBytes: limit }); }
+        if (method !== 'PUT' || !Number.isSafeInteger(input.limitMiB) || input.limitMiB < 1 || !Number.isSafeInteger(input.limitMiB * 1024 * 1024)) return json({ error: '容量上限必须是至少 1 MiB 的安全整数' }, 400);
+        const next = input.limitMiB * 1024 * 1024;
+        if (next < usedBytes) return json({ error: '上限不能低于当前已用空间，请先清理数据' }, 409);
+        settings.put({ key: 'limit', bytes: next });
+        return json({ usedBytes, limitBytes: next });
+      }
       if (parts[1] === 'order' && method === 'PUT') {
         const isFolder = input.kind === 'folder';
         if (!isFolder && input.kind !== 'note') return json({ error: '排序类型无效' }, 400);
@@ -62,7 +79,10 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
         if (!moved || (input.before && !items.some(item => key(item) === input.before))) return json({ error: '排序目标不存在' }, 400);
         const rest = items.filter(item => key(item) !== input.id);
         rest.splice(input.before ? rest.findIndex(item => key(item) === input.before) : rest.length, 0, moved);
-        rest.forEach((item, rank) => (isFolder ? fs : ns).put({ ...item, rank }));
+        const ranked = rest.map((item, rank) => ({ ...item, rank }));
+        const ranks = new Map(ranked.map(item => [key(item), item]));
+        if (!isFolder && size(notes.map(n => ranks.get(n.id) as LocalNote || n), assets) > limit) return overLimit();
+        ranked.forEach(item => (isFolder ? fs : ns).put(item));
         return json({ ok: true });
       }
       if (parts[1] === 'notes') {
@@ -74,7 +94,7 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
           if (method === 'POST') {
             const note: LocalNote = { id: id(), title: titleOf(input.title), content: input.content || '', folder: '', updatedAt: new Date().toISOString(), version: id() };
             validateNote(note);
-            if (size([...notes, note], assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
+            if (size([...notes, note], assets) > limit) return overLimit();
             ns.add(note); return json(note, 201);
           }
         }
@@ -89,7 +109,7 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
             const blob = options.body;
             const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' } as Record<string, string>)[blob.type];
             if (!ext) return json({ error: '仅支持 PNG、JPEG、GIF、WebP 图片' }, 415);
-            if (blob.size > 10 * 1024 * 1024 || size(notes, assets) + blob.size > LIMIT) return json({ error: '单张图片最多 10 MiB，本地总空间最多 200 MiB' }, 413);
+            if (blob.size > 10 * 1024 * 1024 || size(notes, assets) + blob.size > limit) return json({ error: `单张图片最多 10 MiB，本地总空间上限 ${limit / 1024 / 1024} MiB` }, 413);
             const name = id() + '.' + ext; as.add({ key: note.id + '/' + name, blob });
             return json({ path: 'assets/' + name }, 201);
           }
@@ -97,7 +117,9 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
         if (parts[3] === 'share') return json({ error: '本地笔记不支持公开分享，请连接服务器后使用' }, 400);
         if (parts[3] === 'folder' && method === 'PUT') {
           if (input.folder && !folders.some(f => f.name === input.folder)) return json({ error: '文件夹不存在' }, 404);
-          note.folder = input.folder || ''; note.version = id(); ns.put(note); return json(note);
+          note.folder = input.folder || ''; note.version = id();
+          if (size(notes, assets) > limit) return overLimit();
+          ns.put(note); return json(note);
         }
         if (parts.length === 3) {
           if (method === 'GET') return json(note);
@@ -107,9 +129,10 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
           if (method === 'PUT') {
             const next = { ...note, title: titleOf(input.title), content: input.content, version: id(), updatedAt: new Date().toISOString() };
             validateNote(next);
-            if (size(notes.map(n => n.id === next.id ? next : n), assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
+            const removed = assets.filter(a => a.key.startsWith(note.id + '/') && note.content.includes('assets/' + a.key.split('/')[1]) && !next.content.includes('assets/' + a.key.split('/')[1]));
+            if (size(notes.map(n => n.id === next.id ? next : n), assets.filter(a => !removed.includes(a))) > limit) return overLimit();
             ns.put(next);
-            for (const asset of assets.filter(a => a.key.startsWith(note.id + '/'))) if (note.content.includes('assets/' + asset.key.split('/')[1]) && !next.content.includes('assets/' + asset.key.split('/')[1])) as.delete(asset.key);
+            for (const asset of removed) as.delete(asset.key);
             return json(next);
           }
         }
@@ -122,12 +145,16 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
         if (method === 'PUT' && !folders.some(f => f.name === parts[2])) return json({ error: '文件夹不存在' }, 404);
         const folder: LocalFolder = { ...folders.find(f => f.name === parts[2]), name: input.name, protected: false, locked: false };
         if (method === 'PUT') {
+          if (size(notes.map(n => n.folder === parts[2] ? { ...n, folder: folder.name } : n), assets) > limit) return overLimit();
           fs.delete(parts[2]);
           for (const note of notes.filter(n => n.folder === parts[2])) ns.put({ ...note, folder: folder.name });
         }
         fs.put(folder); return json(folder);
       }
       return json({ error: '本地模式不支持此操作' }, 400);
+      })();
+      if (mutating && response.ok && parts[1] !== 'storage') settings.delete('usage');
+      return response;
     });
   } catch (error) { return json({ error: error instanceof Error ? error.message : '本地存储失败' }, 400); }
 }
@@ -142,7 +169,8 @@ export async function exportLocal() {
   const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = '简记完整备份-' + new Date().toISOString().slice(0, 10) + '.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 export async function importLocal(file: File) {
-  if (file.size > 300 * 1024 * 1024) throw new Error('备份文件超过 300 MiB');
+  const backupLimit = await transaction('readonly', async tx => ((await read<{ bytes: number } | undefined>(tx.objectStore('settings').get('limit')))?.bytes || DEFAULT_LIMIT) * 1.5);
+  if (file.size > backupLimit) throw new Error(`备份文件超过 ${backupLimit / 1024 / 1024} MiB，请调整离线空间上限后重试`);
   const data = JSON.parse(await file.text());
   if (data.format !== 'jianji-local' || data.version !== 1 || !Array.isArray(data.notes) || !Array.isArray(data.folders) || !Array.isArray(data.assets)) throw new Error('不是有效的简记完整备份');
   const mapping = new Map<string, string>();
@@ -161,11 +189,14 @@ export async function importLocal(file: File) {
   await transaction('readwrite', async tx => {
     const existing = await read<LocalNote[]>(tx.objectStore('notes').getAll());
     const oldAssets = await read<Asset[]>(tx.objectStore('assets').getAll());
-    if (size([...existing, ...notes], [...oldAssets, ...assets]) > LIMIT) throw new Error('导入后超过本地 200 MiB 上限');
+    const settings = tx.objectStore('settings');
+    const limit = (await read<{ bytes: number } | undefined>(settings.get('limit')))?.bytes || DEFAULT_LIMIT;
+    if (size([...existing, ...notes], [...oldAssets, ...assets]) > limit) throw new Error(`导入后超过本地 ${limit / 1024 / 1024} MiB 上限`);
     const existingFolders = await read<LocalFolder[]>(tx.objectStore('folders').getAll());
     for (const folder of folders) if (!existingFolders.some(f => f.name === folder.name)) tx.objectStore('folders').add(folder);
     for (const note of notes) tx.objectStore('notes').add(note);
     for (const asset of assets) tx.objectStore('assets').add(asset);
+    settings.delete('usage');
   });
   return notes.length;
 }

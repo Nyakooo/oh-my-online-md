@@ -20,6 +20,39 @@ let configured = false;
 let localMode = false;
 let modeLoaded = false;
 let formBusy = false;
+let storageTimer: ReturnType<typeof setTimeout>;
+let storageEpoch = 0;
+const formatBytes = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MiB` : bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${bytes} B`;
+function scheduleStorageRefresh() {
+  clearTimeout(storageTimer);
+  if (localMode) storageTimer = setTimeout(() => { void updateStorage(); }, 600);
+}
+async function updateStorage() {
+  const epoch = ++storageEpoch;
+  $('#storage-panel').hidden = !localMode;
+  $('#storage-usage').hidden = !localMode;
+  if (!localMode) { $('#storage-usage').textContent = ''; return; }
+  $('#storage-summary').textContent = '正在统计空间…';
+  try {
+    // Always read the isolated local library; this never makes a network request.
+    const response = await localRequest('/api/storage');
+    const value = await jsonResponse(response);
+    if (epoch !== storageEpoch || !localMode) return;
+    const used = Number(value.usedBytes), limit = Number(value.limitBytes);
+    if (!Number.isSafeInteger(used) || used < 0 || !Number.isSafeInteger(limit) || limit <= 0) throw new Error('空间统计数据无效');
+    const ratio = used / limit;
+    const text = `离线已用 ${formatBytes(used)} / ${formatBytes(limit)}`;
+    $('#storage-summary').textContent = text + (ratio >= 0.95 ? ' · 空间即将用满，请备份并清理或提高上限' : ratio >= 0.8 ? ' · 空间使用已超过 80%' : '');
+    $('#storage-usage').textContent = text;
+    for (const selector of ['#storage-summary', '#storage-usage']) $(selector).dataset.warning = String(ratio >= 0.8);
+    $<HTMLProgressElement>('#storage-progress').value = Math.min(ratio, 1);
+    if (document.activeElement !== $('#local-limit')) $<HTMLInputElement>('#local-limit').value = String(limit / 1024 / 1024);
+  } catch (error) {
+    if (epoch !== storageEpoch || !localMode) return;
+    $('#storage-summary').textContent = error instanceof Error ? error.message : '暂时无法读取已用空间';
+    $('#storage-usage').textContent = '空间用量暂不可用';
+  }
+}
 const responseOwners = new WeakMap<Response, Connection | undefined>();
 function normalizeServer(value: string) {
   const url = new URL(value.trim());
@@ -45,6 +78,7 @@ async function jsonResponse(response: Response) {
 async function request(path: string, options: RequestInit = {}) {
   if (localMode) {
     const response = await localRequest(path, options);
+    if (response.ok && options.method && options.method !== 'GET' && path !== '/api/storage') scheduleStorageRefresh();
     responseOwners.set(response, undefined);
     return response;
   }
@@ -77,6 +111,7 @@ function busy(value: boolean) {
   $('#connection-form').querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(el => { el.disabled = value; });
 }
 function showSettings() {
+  void updateStorage();
   $('#connection-page').hidden = false;
   $<HTMLInputElement>('#server-url').value = connection?.baseURL || '';
   $<HTMLInputElement>('#server-password').value = '';
@@ -85,6 +120,7 @@ function showSettings() {
   status(localMode ? '当前使用本地笔记，连接服务器不会自动上传或合并数据。' : connection ? '重新连接同一服务器会保留当前未保存内容。' : '可直接打开本地笔记，或连接你的简记服务器。');
 }
 function hideSettings() {
+  void updateStorage();
   $('#connection-page').hidden = true;
   $<HTMLInputElement>('#server-password').value = '';
   $('#share-note').hidden = localMode;
@@ -117,6 +153,18 @@ function resetWorkspace() {
   $<HTMLInputElement>('#note-search').value = '';
 }
 function initConnectionUI() {
+  window.addEventListener('focus', () => { if (configured && localMode) scheduleStorageRefresh(); });
+  $('#local-limit').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); $('#save-local-limit').click(); }
+  });
+  $('#save-local-limit').onclick = async () => {
+    if (!localMode || formBusy) return;
+    busy(true);
+    try {
+      const response = await request('/api/storage', { method: 'PUT', body: JSON.stringify({ limitMiB: Number($<HTMLInputElement>('#local-limit').value) }) });
+      await jsonResponse(response); await updateStorage(); status('离线空间上限已保存。', true);
+    } catch (error) { errorMessage(error); } finally { busy(false); }
+  };
   $('#use-local').onclick = async () => {
     if (state.saving || formBusy) return;
     if (configured && state.dirty && !await allowLeave()) return;
@@ -135,7 +183,7 @@ function initConnectionUI() {
     const field = event.target as HTMLInputElement; const file = field.files?.[0]; field.value = '';
     if (!file) return;
     busy(true);
-    try { const count = await importLocal(file); if (localMode) await refreshNotes(); status(`已导入 ${count} 篇本地笔记，原有笔记保持保留。`, true); }
+    try { const count = await importLocal(file); if (localMode) { await refreshNotes(); scheduleStorageRefresh(); } status(`已导入 ${count} 篇本地笔记，原有笔记保持保留。`, true); }
     catch (error) { errorMessage(error); } finally { busy(false); }
   };
   $('#connection-settings').onclick = () => { if (!state.saving && !formBusy) showSettings(); };
