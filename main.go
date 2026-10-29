@@ -64,6 +64,9 @@ func main() {
 		log.Fatalf("clean incomplete imports: %v", err)
 	}
 	a := &app{dataDir: dataDir, password: os.Getenv("PASSWORD")}
+	if err := a.recoverSyncJournals(); err != nil {
+		log.Fatalf("recover sync transactions: %v", err)
+	}
 	port := env("PORT", "10777")
 	server := &http.Server{Addr: env("HOST", "") + ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("online-md listening on %s (data: %s)", server.Addr, dataDir)
@@ -71,6 +74,12 @@ func main() {
 }
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/sync", a.syncManifest)
+	mux.HandleFunc("GET /api/sync/notes/{id}", a.syncReadNote)
+	mux.HandleFunc("GET /api/sync/notes/{id}/assets/{name}", a.syncReadAsset)
+	mux.HandleFunc("PUT /api/sync/notes/{id}", a.syncWriteNote)
+	mux.HandleFunc("DELETE /api/sync/notes/{id}", a.syncWriteNote)
+	mux.HandleFunc("PUT /api/sync/structure", a.syncWriteStructure)
 	mux.HandleFunc("GET /api/import/info", a.importInfo)
 	mux.HandleFunc("POST /api/import/notes/{id}", a.importNote)
 	mux.HandleFunc("DELETE /api/client/session", a.deleteClientSession)

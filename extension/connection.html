@@ -7,6 +7,9 @@
     <p>本地空间上限 200 MiB，单张图片最多 10 MiB；不支持公开分享和文件夹密码。卸载插件会丢失本地数据，请定期备份。</p>
     <div class="connection-actions"><button type="button" id="export-local">导出本地完整备份</button><button type="button" id="import-local">导入本地备份（追加）</button></div><input type="file" id="local-backup-file" accept=".json,application/json" hidden>
     <div class="connection-actions"><button type="button" id="open-server-import">选择本地笔记导入已连接的服务器</button></div>
+    <div class="connection-actions"><button type="button" id="toggle-server-sync">启用服务器离线同步</button><button type="button" id="sync-now" hidden>立即同步</button></div>
+    <p>启用后仅缓存普通笔记，断网仍可保存；联网后自动同步，双方修改保留冲突副本。密码文件夹和公开分享请切回直接在线模式使用。</p>
+    <button type="button" id="export-server-cache" hidden>导出此服务器缓存备份</button><p id="sync-status" role="status" hidden></p>
     <label for="server-url">服务器地址</label>
     <input id="server-url" type="url" placeholder="https://notes.example.com" required autocomplete="url">
     <label for="server-password">访问密码</label>

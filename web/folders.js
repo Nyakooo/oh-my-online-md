@@ -161,7 +161,7 @@ async function editFolder(folder = null) {
     $('#folder-password-area').hidden = !$('#folder-protect').checked;
     $('#folder-password-input').hidden = existing && !$('#folder-change-password').checked;
   };
-  if (window.noteHost?.localMode) {
+  if (window.noteHost?.localMode || window.noteHost?.syncEnabled) {
     $('#folder-protect').disabled = true;
     $('#folder-protect').closest('label').hidden = true;
     $('#folder-password-area').nextElementSibling.textContent = '本地文件夹保存在此浏览器，不支持访问密码。';

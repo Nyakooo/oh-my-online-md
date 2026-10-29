@@ -90,3 +90,6 @@ git push origin master v1.0.0
 GitHub Actions 会先验证项目，再发布 GHCR 多架构镜像。标签构建成功后创建 GitHub Release，附带 Linux 二进制、校验和、Compose 配置、Nginx 示例与宣传图。发布结果应同时检查 Actions、Release 资产及 GHCR 标签。
 
 GHCR 包应允许匿名拉取。若首次发布的包为 Private，维护者需要在 GitHub Packages 的包设置中调整可见性。
+
+
+服务器离线同步由 `extension/server-sync.ts` 和 `sync_notes.go` 实现。`node tests/run-browser.cjs server-sync` 使用真实 MV3 插件、临时浏览器配置和两个隔离服务器验证断网重启、队列恢复、冲突及服务器隔离；完整浏览器回归包含 14 组。`go test -race ./...` 包含服务端 CAS、幂等回执、事务恢复和附件保留检查。

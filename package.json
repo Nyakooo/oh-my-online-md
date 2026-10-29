@@ -7,7 +7,7 @@
     "build:extension": "node scripts/build-extension.mjs",
     "typecheck:extension": "tsc -p extension/tsconfig.json",
     "test:browser": "node tests/run-browser.cjs",
-    "test:extension": "pnpm build:extension && node tests/run-browser.cjs extension offline server-import"
+    "test:extension": "pnpm build:extension && node tests/run-browser.cjs extension offline server-import server-sync"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.0",

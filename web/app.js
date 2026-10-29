@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { notes: [], current: null, folder: '', version: '', saving: false, dirty: false, saved: { title: '', content: '' } };
+const state = { editEpoch: 0, notes: [], current: null, folder: '', version: '', saving: false, dirty: false, saved: { title: '', content: '' } };
 let loading = true;
 function setLoading(value, message = '正在加载笔记…') {
   loading = value;
@@ -70,6 +70,7 @@ function setSavedState(text) {
   button.disabled = loading || state.saving || Boolean(state.current && !state.dirty);
 }
 function markDirty() {
+  state.editEpoch++;
   state.dirty = $('#title').value !== state.saved.title || contentEditor.getValue() !== state.saved.content;
   setSavedState(state.dirty ? '未保存' : state.current ? '已保存' : '草稿');
 }
@@ -143,8 +144,10 @@ async function allowLeave() {
   if (choice === 'discard') { state.dirty = false; setSavedState('已保存'); return true; }
   return false;
 }
-async function loadNote(id) {
+async function loadNote(id, canApply = () => true) {
   const note = await api(`/api/notes/${id}`);
+  if (!canApply()) return false;
+  state.editEpoch++;
   clearPendingImages();
   clearNoteAssets();
   showNoteEditor();

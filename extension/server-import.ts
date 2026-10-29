@@ -9,7 +9,7 @@ async function assetName(key: string) {
   return Array.from(new Uint8Array(hash)).map(n => n.toString(16).padStart(2, '0')).join('').slice(0, 32) + '.' + key.split('.').pop();
 }
 type Destination = { from: number; to: number; value: string };
-function destinations(content: string) {
+export function destinations(content: string) {
   const result: Destination[] = [];
   const decode = (value: string) => {
     const textarea = document.createElement('textarea'); textarea.innerHTML = value;

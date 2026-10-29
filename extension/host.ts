@@ -1,11 +1,13 @@
+import { ServerSync } from './server-sync';
 import { openServerImport } from './server-import';
 import { localRequest, exportLocal, importLocal } from './local-store';
 interface Connection { baseURL: string; token: string; expiresAt: string }
-declare const state: { current: string | null; folder: string; dirty: boolean; saving: boolean; version: string; saved: { title: string; content: string }; notes: unknown[] };
+declare const state: { current: string | null; folder: string; dirty: boolean; saving: boolean; editEpoch: number; version: string; saved: { title: string; content: string }; notes: unknown[] };
 declare const loading: boolean;
 declare function allowLeave(): Promise<boolean>;
 declare function init(): Promise<void>;
 declare function refreshNotes(): Promise<void>;
+declare function loadNote(id: string, canApply?: () => boolean): Promise<void | boolean>;
 declare function setLoading(value: boolean): void;
 declare function clearPendingImages(): void;
 declare function markDirty(): void;
@@ -21,6 +23,59 @@ let configured = false;
 let localMode = false;
 let modeLoaded = false;
 let formBusy = false;
+let workspace: ServerSync | undefined;
+let workspaceOwner: Connection | undefined;
+let syncTimer: ReturnType<typeof setTimeout> | undefined;
+let syncBusy = false;
+let syncError = '';
+type SyncSettings = Record<string, { serverID: string; enabled: boolean }>;
+async function prepareWorkspace() {
+  if (localMode || !connection) { workspace = undefined; workspaceOwner = undefined; return; }
+  if (workspaceOwner === connection) return;
+  const settings = (await chrome.storage.local.get('serverSync')).serverSync as SyncSettings | undefined;
+  const config = settings?.[connection.baseURL];
+  workspaceOwner = connection; syncError = '';
+  const owner = connection;
+  workspace = config?.enabled ? new ServerSync(owner.baseURL, config.serverID, (path, options) => remoteRequest(owner, path, options), message => showNotice(message)) : undefined;
+}
+async function updateSyncLabel() {
+  if (localMode || !workspace) return;
+  const cached = workspace; const status = await cached.status();
+  if (cached !== workspace || localMode) return;
+  const label = `${cached.online ? '已连接' : '离线'} · ${status.pending ? status.pending + ' 项待同步' : '缓存已保存'}`;
+  $('#server-connection-label').textContent = label;
+  $('#sync-status').textContent = label + (syncError ? '。' + syncError : '') + (status.notice ? '。' + status.notice : '');
+}
+async function syncNow(manual = false) {
+  const cached = workspace;
+  if (!cached || localMode || syncBusy) return;
+  if (state.saving || state.dirty || (!manual && (formBusy || loading))) { if (manual && state.dirty) showNotice('请先保存当前编辑，再同步已保存的笔记'); scheduleSync(); return; }
+  syncBusy = true;
+  $<HTMLButtonElement>('#sync-now').disabled = true;
+  $('#sync-status').textContent = '正在同步…';
+  try {
+    await cached.synchronize(); syncError = '';
+    if (cached === workspace && !localMode && configured) {
+      await refreshNotes();
+      if (!state.dirty && !state.saving && state.current) {
+        const active = state.current, version = state.version, epoch = state.editEpoch;
+        const canApply = () => cached === workspace && !localMode && !state.dirty && !state.saving && !loading && state.current === active && state.version === version && state.editEpoch === epoch && !document.activeElement?.closest('.cm-editor') && document.activeElement !== $('#title');
+        const response = await cached.request('/api/notes/' + active);
+        if (response.ok) {
+          const note = await response.json();
+          if (note.version !== version && canApply()) await loadNote(active, canApply);
+        } else if (canApply()) await init();
+      }
+    }
+    if (manual) showNotice('同步完成；冲突处理结果请查看设置中的同步状态。');
+  } catch (error) { syncError = error instanceof Error ? error.message : '同步失败，修改仍保存在缓存'; if (manual) showNotice(syncError); }
+  finally { syncBusy = false; $<HTMLButtonElement>('#sync-now').disabled = false; await updateSyncLabel(); }
+}
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  if (workspace && !localMode) syncTimer = setTimeout(() => { void syncNow(); }, 1500);
+}
+
 const responseOwners = new WeakMap<Response, Connection | undefined>();
 function normalizeServer(value: string) {
   const url = new URL(value.trim());
@@ -43,22 +98,29 @@ async function jsonResponse(response: Response) {
   if (!response.ok) throw new Error(String(data.error || `请求失败（${response.status}）`));
   return data;
 }
-async function request(path: string, options: RequestInit = {}) {
-  if (localMode) {
-    const response = await localRequest(path, options);
-    responseOwners.set(response, undefined);
-    return response;
-  }
-  if (!connection?.token || !path.startsWith('/api/')) throw new Error('请先连接服务器');
-  const owner = connection;
+async function remoteRequest(owner: Connection, path: string, options: RequestInit = {}) {
+  if (connection !== owner || localMode) throw new Error('服务器连接已切换，请重新操作');
   const headers = new Headers(options.headers);
   headers.set('Authorization', 'Bearer ' + owner.token);
   if (!headers.has('X-Note-Window')) headers.set('X-Note-Window', (window as unknown as { noteWindowID: string }).noteWindowID);
   const response = await fetch(serverURL(path, owner.baseURL), { ...options, headers, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: options.signal || AbortSignal.timeout(60000) });
-  responseOwners.set(response, owner);
-  assertCurrent(response);
-  if (response.status === 401) $('#server-connection-label').textContent = '登录已过期 · 点击设置重新连接';
+  responseOwners.set(response, owner); assertCurrent(response);
+  if (response.status === 401 && !workspace) $('#server-connection-label').textContent = '登录已过期 · 点击设置重新连接';
   return response;
+}
+async function request(path: string, options: RequestInit = {}) {
+  if (localMode) {
+    const response = await localRequest(path, options); responseOwners.set(response, undefined); return response;
+  }
+  if (!connection?.token || !path.startsWith('/api/')) throw new Error('请先连接服务器');
+  const owner = connection;
+  if (workspace) {
+    const cached = workspace; const response = await cached.request(path, options);
+    responseOwners.set(response, owner); assertCurrent(response);
+    if (options.method && options.method !== 'GET' && response.ok) { scheduleSync(); void updateSyncLabel(); }
+    return response;
+  }
+  return remoteRequest(owner, path, options);
 }
 function assertCurrent(response: Response) {
   if (responseOwners.get(response) !== (localMode ? undefined : connection)) throw new Error('服务器连接已切换，请重新操作');
@@ -83,13 +145,19 @@ function showSettings() {
   $<HTMLInputElement>('#server-password').value = '';
   $('#back-to-notes').hidden = !configured;
   $('#disconnect-server').hidden = !connection?.token;
+  $('#toggle-server-sync').textContent = workspace ? '停止服务器离线同步' : '启用服务器离线同步';
+  $('#export-server-cache').hidden = !workspace;
+  $('#sync-now').hidden = !workspace;
+  $('#sync-status').hidden = !workspace;
+  void updateSyncLabel();
   status(localMode ? '当前使用本地笔记，连接服务器不会自动上传或合并数据。' : connection ? '重新连接同一服务器会保留当前未保存内容。' : '可直接打开本地笔记，或连接你的简记服务器。');
 }
 function hideSettings() {
   $('#connection-page').hidden = true;
   $<HTMLInputElement>('#server-password').value = '';
-  $('#share-note').hidden = localMode;
+  $('#share-note').hidden = localMode || Boolean(workspace);
   $('#server-connection-label').textContent = localMode ? '本地笔记 · 仅此浏览器' : connection ? new URL(connection.baseURL).host : '尚未连接';
+  void updateSyncLabel();
 }
 async function checkServer(baseURL: string) {
   const response = await fetch(serverURL('/api/client/info', baseURL), { credentials: 'omit', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(12000) });
@@ -118,6 +186,45 @@ function resetWorkspace() {
   $<HTMLInputElement>('#note-search').value = '';
 }
 function initConnectionUI() {
+  $('#toggle-server-sync').onclick = async () => {
+    if (!connection || localMode) { errorMessage(new Error('请先切换到已连接的服务器模式')); return; }
+    if (syncBusy || state.saving || formBusy) return;
+    if (state.dirty && !await allowLeave()) return;
+    const owner = connection; busy(true);
+    try {
+      const settings = ((await chrome.storage.local.get('serverSync')).serverSync || {}) as SyncSettings;
+      if (workspace) {
+        const pending = (await workspace.status()).pending;
+        if (pending) throw new Error(`仍有 ${pending} 项待同步，暂不能停止离线同步；可先导出缓存备份，联网同步完成后再停止。`);
+        settings[owner.baseURL] = { serverID: workspace.serverID, enabled: false };
+        await chrome.storage.local.set({ serverSync: settings }); workspace = undefined; workspaceOwner = undefined;
+      } else {
+        let next: ServerSync;
+        try {
+          const response = await remoteRequest(owner, '/api/sync'); const info = await jsonResponse(response);
+          if (info.syncAPI !== 1 || !/^[a-f0-9]{32}$/.test(String(info.serverID))) throw new Error('服务器不支持离线同步，请升级后端');
+          next = new ServerSync(owner.baseURL, String(info.serverID), (path, options) => remoteRequest(owner, path, options), message => showNotice(message));
+          await next.synchronize(); syncError = '';
+        } catch (error) {
+          const previous = settings[owner.baseURL]; if (!previous) throw error;
+          next = new ServerSync(owner.baseURL, previous.serverID, (path, options) => remoteRequest(owner, path, options), message => showNotice(message));
+          if (!(await next.status()).initialized) throw error;
+          syncError = error instanceof Error ? error.message : '服务器不可达，已打开已有缓存';
+        }
+        settings[owner.baseURL] = { serverID: next.serverID, enabled: true };
+        await chrome.storage.local.set({ serverSync: settings }); workspace = next; workspaceOwner = owner;
+      }
+      resetWorkspace(); configured = true; await init();
+    } catch (error) { errorMessage(error); } finally { busy(false); }
+  };
+  $('#sync-now').onclick = () => { void syncNow(true); };
+  $('#export-server-cache').onclick = async () => {
+    if (!workspace) return;
+    busy(true); try { await exportLocal(workspace.databaseName); status('服务器缓存已导出；可导入独立本地笔记恢复内容，原同步队列仍保留。', true); }
+    catch (error) { errorMessage(error); } finally { busy(false); }
+  };
+  window.addEventListener('online', () => { void syncNow(); });
+  setInterval(() => { void syncNow(); }, 15000);
   $('#open-server-import').onclick = async () => {
     if (state.saving || formBusy) return;
     const owner = connection;
@@ -132,7 +239,7 @@ function initConnectionUI() {
     busy(true);
     try {
       await chrome.storage.local.set({ workspaceMode: 'local' });
-      localMode = true; resetWorkspace(); configured = true; hideSettings(); await init();
+      localMode = true; workspace = undefined; workspaceOwner = undefined; resetWorkspace(); configured = true; hideSettings(); await init();
     } catch (error) { errorMessage(error); } finally { busy(false); }
   };
   $('#export-local').onclick = async () => {
@@ -180,7 +287,8 @@ function initConnectionUI() {
         try { await revoke(connection); } catch { revocationWarning = "旧服务器无法连接，未能远程撤销旧登录；本地凭证已移除，旧会话将在到期后失效。"; }
         if (originPermission(connection.baseURL) !== originPermission(next.baseURL)) revocationWarning += await removeServerPermission(connection.baseURL);
       }
-      connection = next; localMode = false;
+      connection = next; localMode = false; workspace = undefined; workspaceOwner = undefined;
+      await prepareWorkspace();
       await chrome.storage.local.set({ workspaceMode: 'server' });
       clearNoteAssets();
       await chrome.storage.local.set({ connection });
@@ -207,7 +315,7 @@ function initConnectionUI() {
         try { await revoke(connection); } catch { revocationWarning = '已从本地退出；服务器无法连接，旧登录未能远程撤销，将在到期后失效。'; }
         revocationWarning += await removeServerPermission(connection.baseURL);
       }
-      await chrome.storage.local.remove('connection'); connection = undefined; localMode = false; await chrome.storage.local.set({ workspaceMode: 'server' }); configured = false;
+      await chrome.storage.local.remove('connection'); connection = undefined; workspace = undefined; workspaceOwner = undefined; localMode = false; await chrome.storage.local.set({ workspaceMode: 'server' }); configured = false;
       resetFolderSession(); clearPendingImages(); state.current = null; state.folder = ''; state.dirty = false;
       contentEditor.setValue('', true); $<HTMLInputElement>('#title').value = ''; $('#crumb-title').textContent = '新便签';
       state.version = ''; state.saved = { title: '', content: '' }; state.notes = [];
@@ -241,13 +349,16 @@ let initialized = false;
 const host = {
   request, serverURL, assertCurrent,
   get localMode() { return localMode; },
+  get syncEnabled() { return Boolean(workspace) && !localMode; },
   async prepare() {
     if (!initialized) { initConnectionUI(); initialized = true; }
     if (!modeLoaded) { localMode = (await chrome.storage.local.get('workspaceMode')).workspaceMode === 'local'; modeLoaded = true; }
     if (!connection) connection = (await chrome.storage.local.get('connection')).connection as Connection | undefined;
     const { showSettings: requested } = await chrome.storage.session.get('showSettings');
     await chrome.storage.session.remove('showSettings');
+    await prepareWorkspace();
     if (localMode) { configured = true; if (requested) showSettings(); else hideSettings(); return true; }
+    if (workspace) { configured = true; if (requested) showSettings(); else hideSettings(); scheduleSync(); return true; }
     if (!connection?.token || Date.parse(connection.expiresAt) < Date.now() || !await chrome.permissions.contains({ origins: [originPermission(connection.baseURL)] })) { showSettings(); return false; }
     configured = true;
     if (requested) showSettings(); else hideSettings();

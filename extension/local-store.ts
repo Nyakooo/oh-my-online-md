@@ -1,56 +1,62 @@
 // A transaction is the unit of a local edit: concurrent windows cannot overwrite
 // a newer revision after reading an older one.
 export type LocalNote = { id: string; title: string; content: string; folder: string; updatedAt: string; version: string; rank?: number };
-type LocalFolder = { name: string; protected: false; locked: false; rank?: number };
+export type LocalFolder = { name: string; protected: false; locked: false; rank?: number };
 export type Asset = { key: string; blob: Blob };
 const LIMIT = 200 * 1024 * 1024;
 const id = () => crypto.randomUUID().replaceAll('-', '');
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
-const read = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-let database: Promise<IDBDatabase> | undefined;
-function open() {
-  return database ||= new Promise((resolve, reject) => {
-    const request = indexedDB.open('jianji-local', 2);
+export const readLocal = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+const databases = new Map<string, Promise<IDBDatabase>>();
+function open(name = 'jianji-local') {
+  const existing = databases.get(name); if (existing) return existing;
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name, 3);
     request.onupgradeneeded = () => {
-      for (const [name, keyPath] of [['notes', 'id'], ['folders', 'name'], ['assets', 'key'], ['imports', 'key']]) {
+      for (const [name, keyPath] of [['notes', 'id'], ['folders', 'name'], ['assets', 'key'], ['imports', 'key'], ['sync', 'id'], ['meta', 'key']]) {
         if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, { keyPath });
       }
     };
     request.onsuccess = () => {
-      request.result.onversionchange = () => { request.result.close(); database = undefined; };
+      request.result.onversionchange = () => { request.result.close(); databases.delete(name); };
       resolve(request.result);
     };
-    request.onerror = () => { database = undefined; reject(request.error); };
+    request.onerror = () => { databases.delete(name); reject(request.error); };
   });
+  databases.set(name, opening); return opening;
 }
-async function transaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => Promise<T>) {
-  const db = await open();
-  const tx = db.transaction(['notes', 'folders', 'assets', 'imports'], mode);
+export async function localTransaction<T>(mode: IDBTransactionMode, action: (tx: IDBTransaction) => Promise<T>, databaseName = 'jianji-local') {
+  const db = await open(databaseName);
+  const tx = db.transaction(['notes', 'folders', 'assets', 'imports', 'sync', 'meta'], mode);
   const done = new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error || new Error('本地保存已取消')); tx.onerror = () => {}; });
   try { const result = await action(tx); await done; return result; }
   catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
 }
-function validFolder(name: unknown): name is string {
+export function validFolder(name: unknown): name is string {
   return typeof name === 'string' && name.trim() === name && Boolean(name) && !name.startsWith('.') && !/[\\/\x00-\x1f\x7f]/.test(name) && new TextEncoder().encode(name).length <= 255;
 }
 const titleOf = (value: unknown) => typeof value === 'string' ? value.trim() || '未命名笔记' : '未命名笔记';
-function validateNote(note: LocalNote) {
+export function validateNote(note: LocalNote) {
   if (!/^[a-f0-9]{32}$/.test(note.id) || typeof note.title !== 'string' || [...note.title].length > 200 || typeof note.content !== 'string' || new TextEncoder().encode(note.content).length > 16 * 1024 * 1024 || typeof note.folder !== 'string' || (note.folder && !validFolder(note.folder)) || !Number.isFinite(Date.parse(note.updatedAt))) throw new Error('笔记数据无效或超过大小上限');
 }
-function size(notes: LocalNote[], assets: Asset[]) {
+export function localSize(notes: LocalNote[], assets: Asset[]) {
   return new TextEncoder().encode(JSON.stringify(notes)).length + assets.reduce((sum, asset) => sum + asset.blob.size, 0);
 }
-export async function localRequest(path: string, options: RequestInit = {}): Promise<Response> {
+export type MutationHook = (tx: IDBTransaction, before: { notes: LocalNote[]; folders: LocalFolder[] }, path: string) => Promise<void>;
+export async function localRequest(path: string, options: RequestInit = {}, databaseName = 'jianji-local', onMutation?: MutationHook): Promise<Response> {
   const url = new URL(path, 'https://local.invalid');
   const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
   const method = options.method || 'GET';
   const mutating = method !== 'GET';
   try {
-    return await transaction(mutating ? 'readwrite' : 'readonly', async tx => {
+    return await localTransaction(mutating ? 'readwrite' : 'readonly', async tx => {
+      let before: { notes: LocalNote[]; folders: LocalFolder[] } = { notes: [], folders: [] };
+      const response = await (async () => {
       const ns = tx.objectStore('notes'), fs = tx.objectStore('folders'), as = tx.objectStore('assets');
-      const notes = (await read<LocalNote[]>(ns.getAll())).sort((a, b) => (a.rank ?? -Date.parse(a.updatedAt)) - (b.rank ?? -Date.parse(b.updatedAt)));
-      const folders = (await read<LocalFolder[]>(fs.getAll())).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0) || a.name.localeCompare(b.name));
-      const assets = await read<Asset[]>(as.getAll());
+      const notes = (await readLocal<LocalNote[]>(ns.getAll())).sort((a, b) => (a.rank ?? -Date.parse(a.updatedAt)) - (b.rank ?? -Date.parse(b.updatedAt)));
+      const folders = (await readLocal<LocalFolder[]>(fs.getAll())).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0) || a.name.localeCompare(b.name));
+      if (mutating && onMutation) before = { notes: notes.map(note => ({ ...note })), folders: folders.map(folder => ({ ...folder })) };
+      const assets = await readLocal<Asset[]>(as.getAll());
       const input = typeof options.body === 'string' ? JSON.parse(options.body) : {};
       if (parts[1] === 'order' && method === 'PUT') {
         const isFolder = input.kind === 'folder';
@@ -73,7 +79,7 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
           if (method === 'POST') {
             const note: LocalNote = { id: id(), title: titleOf(input.title), content: input.content || '', folder: '', updatedAt: new Date().toISOString(), version: id() };
             validateNote(note);
-            if (size([...notes, note], assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
+            if (localSize([...notes, note], assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
             ns.add(note); return json(note, 201);
           }
         }
@@ -88,7 +94,7 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
             const blob = options.body;
             const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' } as Record<string, string>)[blob.type];
             if (!ext) return json({ error: '仅支持 PNG、JPEG、GIF、WebP 图片' }, 415);
-            if (blob.size > 10 * 1024 * 1024 || size(notes, assets) + blob.size > LIMIT) return json({ error: '单张图片最多 10 MiB，本地总空间最多 200 MiB' }, 413);
+            if (blob.size > 10 * 1024 * 1024 || localSize(notes, assets) + blob.size > LIMIT) return json({ error: '单张图片最多 10 MiB，本地总空间最多 200 MiB' }, 413);
             const name = id() + '.' + ext; as.add({ key: note.id + '/' + name, blob });
             return json({ path: 'assets/' + name }, 201);
           }
@@ -106,7 +112,7 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
           if (method === 'PUT') {
             const next = { ...note, title: titleOf(input.title), content: input.content, version: id(), updatedAt: new Date().toISOString() };
             validateNote(next);
-            if (size(notes.map(n => n.id === next.id ? next : n), assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
+            if (localSize(notes.map(n => n.id === next.id ? next : n), assets) > LIMIT) return json({ error: '本地空间超过 200 MiB，请导出备份并清理附件' }, 413);
             ns.put(next);
             for (const asset of assets.filter(a => a.key.startsWith(note.id + '/'))) if (note.content.includes('assets/' + asset.key.split('/')[1]) && !next.content.includes('assets/' + asset.key.split('/')[1])) as.delete(asset.key);
             return json(next);
@@ -127,12 +133,15 @@ export async function localRequest(path: string, options: RequestInit = {}): Pro
         fs.put(folder); return json(folder);
       }
       return json({ error: '本地模式不支持此操作' }, 400);
-    });
+      })();
+      if (mutating && response.ok && onMutation) await onMutation(tx, before, url.pathname);
+      return response;
+    }, databaseName);
   } catch (error) { return json({ error: error instanceof Error ? error.message : '本地存储失败' }, 400); }
 }
 
-export async function exportLocal() {
-  const snapshot = await transaction('readonly', async tx => ({ notes: await read<LocalNote[]>(tx.objectStore('notes').getAll()), folders: await read<LocalFolder[]>(tx.objectStore('folders').getAll()), assets: await read<Asset[]>(tx.objectStore('assets').getAll()) }));
+export async function exportLocal(databaseName = 'jianji-local') {
+  const snapshot = await localTransaction('readonly', async tx => ({ notes: await readLocal<LocalNote[]>(tx.objectStore('notes').getAll()), folders: await readLocal<LocalFolder[]>(tx.objectStore('folders').getAll()), assets: await readLocal<Asset[]>(tx.objectStore('assets').getAll()) }), databaseName);
   const assets = await Promise.all(snapshot.assets.map(async asset => {
     const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(asset.blob); });
     return { key: asset.key, data };
@@ -157,11 +166,11 @@ export async function importLocal(file: File) {
     note.id = mapping.get(note.id)!; note.version = id();
     if (note.folder && !folders.some(f => f.name === note.folder)) throw new Error('备份缺少文件夹');
   }
-  await transaction('readwrite', async tx => {
-    const existing = await read<LocalNote[]>(tx.objectStore('notes').getAll());
-    const oldAssets = await read<Asset[]>(tx.objectStore('assets').getAll());
-    if (size([...existing, ...notes], [...oldAssets, ...assets]) > LIMIT) throw new Error('导入后超过本地 200 MiB 上限');
-    const existingFolders = await read<LocalFolder[]>(tx.objectStore('folders').getAll());
+  await localTransaction('readwrite', async tx => {
+    const existing = await readLocal<LocalNote[]>(tx.objectStore('notes').getAll());
+    const oldAssets = await readLocal<Asset[]>(tx.objectStore('assets').getAll());
+    if (localSize([...existing, ...notes], [...oldAssets, ...assets]) > LIMIT) throw new Error('导入后超过本地 200 MiB 上限');
+    const existingFolders = await readLocal<LocalFolder[]>(tx.objectStore('folders').getAll());
     for (const folder of folders) if (!existingFolders.some(f => f.name === folder.name)) tx.objectStore('folders').add(folder);
     for (const note of notes) tx.objectStore('notes').add(note);
     for (const asset of assets) tx.objectStore('assets').add(asset);
@@ -171,21 +180,25 @@ export async function importLocal(file: File) {
 
 
 export async function localSnapshot() {
-  return transaction('readonly', async tx => ({
-    notes: await read<LocalNote[]>(tx.objectStore('notes').getAll()),
-    assets: await read<Asset[]>(tx.objectStore('assets').getAll())
+  return localTransaction('readonly', async tx => ({
+    notes: await readLocal<LocalNote[]>(tx.objectStore('notes').getAll()),
+    assets: await readLocal<Asset[]>(tx.objectStore('assets').getAll())
   }));
 }
 export type ImportProgress = { key: string; remoteID: string; done: boolean };
 export async function importProgress(key: string): Promise<ImportProgress> {
-  return transaction('readwrite', async tx => {
+  return localTransaction('readwrite', async tx => {
     const store = tx.objectStore('imports');
-    const existing = await read<ImportProgress | undefined>(store.get(key));
+    const existing = await readLocal<ImportProgress | undefined>(store.get(key));
     if (existing) return existing;
     const progress = { key, remoteID: id(), done: false };
     store.add(progress); return progress;
   });
 }
 export async function finishImport(progress: ImportProgress) {
-  await transaction('readwrite', async tx => { tx.objectStore('imports').put({ ...progress, done: true }); });
+  await localTransaction('readwrite', async tx => { tx.objectStore('imports').put({ ...progress, done: true }); });
+}
+
+export function assertLocalCapacity(notes: LocalNote[], assets: Asset[]) {
+  if (localSize(notes, assets) > LIMIT) throw new Error('服务器离线缓存超过 200 MiB，请导出备份并清理笔记或附件');
 }
