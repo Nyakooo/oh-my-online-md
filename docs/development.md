@@ -66,6 +66,7 @@ bash scripts/test-browser.sh
 - `tests/share.cjs`：匿名只读访问、分享快照、有效期、替换、取消、图片和黑白灰夜间配色。
 - `tests/folders.cjs`：目录、拖拽、密码、重命名、移动与未保存保护。
 - `tests/folder-policy.cjs`：根笔记与目录排序、持久化、窗口锁定、闲置及草稿图片恢复。
+- `tests/offline.cjs`：真实 MV3 离线存储、图片、浏览器重启、文件夹重命名和排序、版本冲突、完整备份及原子导入。
 - `tests/extension.cjs`：真实 MV3 环境、客户端登录、图片、窗口复用、后台恢复、服务器切换和并发保存。
 
 测试会写入数据，请勿将 `TEST_URL` 或 `TEST_DATA_DIR` 指向真实部署。分享测试会修改测试分享的到期时间，以验证过期行为，不需要等待实际天数。

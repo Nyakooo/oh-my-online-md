@@ -184,6 +184,31 @@ const path = require('node:path');
       // Logout must also work locally when remote revocation cannot reach the server.
       await page.route(server + '/api/client/session', route => route.request().method() === 'DELETE' ? route.abort() : route.continue());
     }
+    // Local/server workspaces stay separate, and a cancelled switch keeps the draft.
+    await page.locator('#connection-settings').click(); await page.locator('#use-local').click();
+    await page.locator('#loading-panel').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('.note-item').count(), 0);
+    await page.locator('#edit-tab').click();
+    await page.locator('#title').fill('仅此浏览器'); await page.locator('.cm-content').fill('不应自动上传');
+    await page.locator('#save-note').click(); await page.locator('#save-note[data-state="saved"]').waitFor();
+    const localID = await page.evaluate(() => state.current);
+    await page.locator('#title').fill('切换前的本地草稿');
+    await page.locator('#connection-settings').click(); await page.locator('#server-password').fill(password);
+    await page.locator('#connect-server').click(); await page.locator('#unsaved-dialog[open]').waitFor();
+    await page.locator('#cancel-navigation').click();
+    await page.waitForFunction(() => !document.querySelector('#connect-server').disabled);
+    assert.equal(await page.locator('#title').inputValue(), '切换前的本地草稿');
+    await page.locator('#connect-server').click(); await page.locator('#unsaved-dialog[open]').waitFor();
+    await page.locator('#discard-changes').click(); await page.locator('#connection-page').waitFor({ state: 'hidden' });
+    await page.locator('#loading-panel').waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(async id => (await api('/api/notes')).some(n => n.id === id), localID), false);
+    assert.equal(await page.locator('#share-note').isVisible(), true);
+    await page.locator('#connection-settings').click(); await page.locator('#use-local').click();
+    await page.locator('#loading-panel').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#title').inputValue(), '仅此浏览器');
+    await page.locator('#connection-settings').click(); await page.locator('#server-password').fill(password);
+    await page.locator('#connect-server').click(); await page.locator('#connection-page').waitFor({ state: 'hidden' });
+    await page.locator('#loading-panel').waitFor({ state: 'hidden' });
     await page.locator('#connection-settings').click();
     await page.locator('#disconnect-server').click();
     await page.locator('#disconnect-server').waitFor({ state: 'hidden' });

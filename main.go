@@ -53,14 +53,17 @@ type noteMetadata struct {
 }
 
 func main() {
-	dataDir := env("DATA_DIR", "./data")
+	dataDir, err := filepath.Abs(env("DATA_DIR", "./data"))
+	if err != nil {
+		log.Fatalf("resolve data directory: %v", err)
+	}
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		log.Fatalf("create data directory: %v", err)
 	}
 	a := &app{dataDir: dataDir, password: os.Getenv("PASSWORD")}
 	port := env("PORT", "10777")
-	server := &http.Server{Addr: ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("online-md listening on :%s (data: %s)", port, dataDir)
+	server := &http.Server{Addr: env("HOST", "") + ":" + port, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second}
+	log.Printf("online-md listening on %s (data: %s)", server.Addr, dataDir)
 	log.Fatal(server.ListenAndServe())
 }
 func (a *app) routes() http.Handler {
@@ -263,6 +266,9 @@ func (a *app) deleteNote(w http.ResponseWriter, r *http.Request) {
 	defer a.writeMu.Unlock()
 	item, ok := a.requestNote(w, r)
 	if !ok {
+		return
+	}
+	if !matchNoteVersion(w, r, item) {
 		return
 	}
 	if err := os.RemoveAll(filepath.Join(a.dataDir, item.DirName)); err != nil {

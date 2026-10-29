@@ -277,7 +277,7 @@ async function deleteNote() {
   if (loading || !state.current || state.saving || folderState.busy) return;
   const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
   if (!confirm(message)) return;
-  await api(`/api/notes/${state.current}`, { method: 'DELETE' });
+  await api(`/api/notes/${state.current}`, { method: 'DELETE', headers: state.version ? { 'If-Match': '"' + state.version + '"' } : {} });
   clearPendingImages();
   state.current = null;
   state.version = '';
@@ -454,7 +454,7 @@ $('#note-search').addEventListener('keydown', event => {
 $('#new-note').addEventListener('click', createNote);
 $('#title').addEventListener('input', markDirty);
 $('#save-note').addEventListener('click', saveNote);
-$('#delete-note').addEventListener('click', deleteNote);
+$('#delete-note').addEventListener('click', () => deleteNote().catch(error => showNotice(error.message)));
 document.addEventListener('click', event => { if (!event.target.closest('#note-menu')) $('#note-menu').hidden = true; });
 $('#note-menu').addEventListener('click', () => { $('#note-menu').hidden = true; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#note-menu').hidden = true; });
