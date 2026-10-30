@@ -1,19 +1,24 @@
 const $ = (selector) => document.querySelector(selector);
 const state = { notes: [], current: null, folder: '', version: '', saving: false, dirty: false, saved: { title: '', content: '' } };
 let loading = true;
-function setLoading(value, message = '正在加载笔记…') {
+function setLoading(value, message = '正在加载笔记…', scope = 'page') {
+  const pageLoading = value && scope === 'page';
   loading = value;
   $('.app').dataset.loading = String(value);
+  $('.app').dataset.loadingScope = scope;
   $('.app').setAttribute('aria-busy', String(value));
   $('#loading-panel').hidden = !value;
   $('#loading-message').textContent = message;
   $('#retry-load').hidden = true;
   $('#editor-pane').inert = value;
   $('#editor-pane').setAttribute('aria-busy', String(value));
-  $('#new-note').disabled = value;
-  $('#new-folder').disabled = value;
-  $('#note-search').disabled = value;
+  $('#sidebar').inert = value;
+  $('.sidebar-rail').inert = value;
+  $('#new-note').disabled = pageLoading;
+  $('#new-folder').disabled = pageLoading;
+  $('#note-search').disabled = pageLoading;
   $('#note-list').inert = value;
+  document.querySelectorAll('.sidebar-rail [data-note-action]').forEach(button => { button.disabled = pageLoading; });
   $('#mobile-menu').disabled = value;
   $('#note-menu').hidden = true;
   $('#save-note').disabled = value || state.saving || !$('#folder-locked-panel').hidden || Boolean(state.current && !state.dirty);
@@ -151,6 +156,7 @@ async function loadNote(id) {
   state.current = id;
   state.version = note.version;
   state.folder = note.folder || '';
+  const expandFolder = state.folder && !folderState.expanded.has(state.folder);
   if (state.folder) folderState.expanded.add(state.folder);
   $('#delete-note').disabled = false;
   $('#title').value = note.title;
@@ -159,18 +165,19 @@ async function loadNote(id) {
   updateFolderCrumb(note.title);
   state.dirty = false;
   setSavedState('已保存');
-  await searchNotes();
-  $('#sidebar').classList.remove('open');
+  if (expandFolder) await searchNotes();
+  else for (const button of $('#note-list').querySelectorAll('.note-item')) button.classList.toggle('active', button.dataset.noteId === id);
 }
 async function openNote(id) {
   if (loading) return;
-  if (id === state.current) { await leaveProtectedFolder(state.folder, true); $('#sidebar').classList.remove('open'); return; }
+  if (id === state.current) { await leaveProtectedFolder(state.folder, true); closeMobileSidebar(); return; }
   if (!await allowLeave() || loading) return;
   const target = state.notes.find(note => note.id === id)?.folder || '';
   if (!await leaveProtectedFolder(target, true)) return;
-  setLoading(true);
+  setLoading(true, '正在加载笔记…', 'note');
   try {
     await loadNote(id);
+    closeMobileSidebar();
     return true;
   } catch (error) { showNotice(error.message); return false; }
   finally { setLoading(false); }
@@ -187,7 +194,7 @@ async function createNote() {
     state.saved = { title: '', content: '' };
     updateFolderCrumb('新便签'); setSavedState('草稿');
     await refreshNotes();
-    $('#sidebar').classList.remove('open');
+    closeMobileSidebar();
   } catch (error) { showNotice(error.message); }
   finally { setLoading(false); $('#title').focus(); }
 }
@@ -458,14 +465,77 @@ $('#delete-note').addEventListener('click', () => deleteNote().catch(error => sh
 document.addEventListener('click', event => { if (!event.target.closest('#note-menu')) $('#note-menu').hidden = true; });
 $('#note-menu').addEventListener('click', () => { $('#note-menu').hidden = true; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#note-menu').hidden = true; });
-$('#mobile-menu').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
-$('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') $('#sidebar').classList.remove('open'); });
+const sidebarMedia = window.matchMedia('(max-width: 760px)');
+function isSidebarOpen() {
+  const collapsed = document.documentElement.dataset.sidebarCollapsed;
+  return collapsed ? collapsed === 'false' : !sidebarMedia.matches;
+}
+function closeMobileSidebar() {
+  if (sidebarMedia.matches) setSidebarOpen(false);
+}
+let sidebarPeekTimer;
+let sidebarPeekPinned = false;
+function setSidebarPeek(open, pin = false) {
+  clearTimeout(sidebarPeekTimer);
+  const peek = open && !sidebarMedia.matches && !isSidebarOpen();
+  sidebarPeekPinned = peek && (pin || sidebarPeekPinned);
+  if (document.documentElement.dataset.sidebarPeek !== String(peek)) document.documentElement.dataset.sidebarPeek = String(peek);
+  $('#rail-directory').setAttribute('aria-expanded', String(peek));
+  $('#rail-directory').classList.toggle('active', peek);
+}
+function syncSidebar() {
+  setSidebarPeek(false);
+  const open = isSidebarOpen();
+  $('#sidebar').classList.toggle('open', sidebarMedia.matches && open);
+  for (const id of ['sidebar-toggle', 'mobile-menu']) $(`#${id}`).setAttribute('aria-expanded', String(open));
+  const label = open ? '收起侧栏' : '展开侧栏';
+  $('#sidebar-toggle').setAttribute('aria-label', label);
+  $('#sidebar-toggle').title = label;
+  $('#sidebar-toggle svg path').setAttribute('d', open ? 'M9 4v16m6-11-3 3 3 3' : 'M9 4v16m4-11 3 3-3 3');
+}
+function setSidebarOpen(open) {
+  document.documentElement.dataset.sidebarCollapsed = String(!open);
+  try { localStorage.setItem('sidebar-collapsed', String(!open)); } catch {}
+  syncSidebar();
+}
+for (const id of ['sidebar-toggle', 'mobile-menu']) $(`#${id}`).addEventListener('click', () => setSidebarOpen(!isSidebarOpen()));
+const sidebarRail = $('.sidebar-rail');
+for (const id of ['rail-directory', 'rail-search']) {
+  for (const type of ['mouseenter', 'focus']) $(`#${id}`).addEventListener(type, () => { if (!loading) setSidebarPeek(true); });
+}
+function scheduleSidebarPeekClose() {
+  clearTimeout(sidebarPeekTimer);
+  sidebarPeekTimer = setTimeout(() => {
+    if (!sidebarPeekPinned && !$('#sidebar').matches(':hover') && !sidebarRail.matches(':hover') && !$('#sidebar').contains(document.activeElement)) setSidebarPeek(false);
+  }, 140);
+}
+sidebarRail.addEventListener('mouseleave', scheduleSidebarPeekClose);
+$('#sidebar').addEventListener('mouseenter', () => clearTimeout(sidebarPeekTimer));
+$('#sidebar').addEventListener('mouseleave', scheduleSidebarPeekClose);
+$('#sidebar').addEventListener('focusout', scheduleSidebarPeekClose);
+sidebarRail.addEventListener('focusout', scheduleSidebarPeekClose);
+$('#rail-new').onclick = () => { setSidebarPeek(false); createNote(); };
+$('#rail-directory').onclick = () => setSidebarPeek(true, true);
+$('#rail-search').onclick = () => { setSidebarPeek(true, true); $('#note-search').focus({ preventScroll: true }); };
+$('#rail-expand').onclick = () => setSidebarOpen(true);
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest('#sidebar, .sidebar-rail')) setSidebarPeek(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.documentElement.dataset.sidebarPeek === 'true') {
+    setSidebarPeek(false);
+    $('#sidebar-toggle').focus();
+  }
+});
+sidebarMedia.addEventListener('change', syncSidebar);
+syncSidebar();
+$('#sidebar').addEventListener('click', (event) => { if (event.target.id === 'sidebar') closeMobileSidebar(); });
 document.addEventListener('keydown', (event) => {
   if (loading) {
     if ((event.ctrlKey || event.metaKey) && ['k', 's', 'p'].includes(event.key.toLowerCase())) event.preventDefault();
     return;
   }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.target.closest('.cm-editor')) { event.preventDefault(); $('#sidebar').classList.add('open'); $('#note-search').focus(); $('#note-search').select(); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.target.closest('.cm-editor')) { event.preventDefault(); setSidebarOpen(true); $('#note-search').focus(); $('#note-search').select(); }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); contentEditor.togglePreview(); }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveNote(); }
 });

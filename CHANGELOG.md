@@ -4,6 +4,14 @@
 
 ## 未发布
 
+## [v1.4.2] - 2026-10-30
+
+- 网页端和插件支持收起侧栏及状态记忆，保留新建、搜索和统一目录入口。
+- 目录悬停预览、点击固定，复用原列表及排序、解锁、拖拽操作。
+- 调整全屏留白、圆角和过渡动画，保留原白天主题配色。
+- 移除编辑区底部操作提示，保留原有功能。
+- 修复侧栏点击抖动、搜索焦点及切换笔记时菜单闪动的问题。
+
 ## [v1.4.1] - 2026-10-30
 
 - 网页端和浏览器插件统一使用 15 个 SVG 工具栏图标，并按功能分组。
@@ -81,3 +89,5 @@
 [v1.4.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.0
 
 [v1.4.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.1
+
+[v1.4.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.2

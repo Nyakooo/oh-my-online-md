@@ -1,0 +1,41 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ baseURL: process.env.TEST_URL, viewport: { width: 1280, height: 900 } });
+    await page.request.post('/api/folders', { data: { name: '汇总目录' } });
+    const first = await (await page.request.post('/api/notes', { data: { title: '第一篇', content: '正文' } })).json();
+    const second = await (await page.request.post('/api/notes', { data: { title: '第二篇', content: '正文' } })).json();
+    await page.goto('/'); await page.waitForFunction(() => !loading);
+    await page.evaluate(() => { window.originalList = document.querySelector('#note-list'); });
+    await page.locator('#sidebar-toggle').click();
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    assert.deepEqual(await page.locator('.sidebar-rail button').evaluateAll(buttons => buttons.map(button => button.id)), ['rail-new', 'rail-search', 'rail-directory', 'rail-expand']);
+    await page.locator('#rail-directory').hover();
+    await page.locator('#sidebar').waitFor({ state: 'visible' });
+    await page.mouse.move(1100, 600);
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await page.locator('#rail-directory').click();
+    await page.mouse.move(1100, 600);
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('#sidebar').isVisible(), true, 'Click keeps directory open after pointer leaves');
+    await page.locator('#note-list').getByRole('button', { name: /展开文件夹 汇总目录/ }).click();
+    assert.equal(await page.locator('#sidebar').isVisible(), true);
+    await page.locator(`[data-note-id="${first.id}"]`).click();
+    await page.waitForFunction(id => !loading && state.current === id, first.id);
+    assert.equal(await page.locator('#title').inputValue(), '第一篇');
+    assert.equal(await page.locator('#sidebar').isVisible(), true);
+    await page.evaluate(({ second, first }) => saveSidebarSort('note', second, first), { second: second.id, first: first.id });
+    assert.equal(await page.locator('#note-list > .note-item').first().getAttribute('data-note-id'), second.id);
+    assert.equal(await page.evaluate(() => window.originalList === document.querySelector('#note-list')), true);
+    await page.locator('#title').click();
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await page.locator('#rail-directory').click();
+    await page.keyboard.press('Escape');
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await page.locator('#rail-search').click();
+    assert.equal(await page.locator('#note-search').evaluate(el => document.activeElement === el), true);
+    console.log('PASS: single directory entry, hover preview, click latch, shared list/order/actions, outside/Escape close and search focus');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exit(1); });

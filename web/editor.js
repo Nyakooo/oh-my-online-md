@@ -39,7 +39,7 @@ function loadDiagrams() {
 window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) {
   const editable = new Compartment();
   let suppressChange = false, canEdit = true, mode = 'edit', revision = 0;
-  parent.innerHTML = `<div class="editor-toolbar"><div role="tablist" aria-label="正文模式"><button type="button" id="edit-tab" role="tab" aria-selected="true" aria-controls="write-panel">编辑</button><button type="button" id="preview-tab" role="tab" aria-selected="false" aria-controls="preview-panel" tabindex="-1">预览</button></div><div class="format-tools" role="group" aria-label="Markdown 格式"></div></div><div id="write-panel" role="tabpanel" aria-labelledby="edit-tab"></div><div id="preview-panel" class="markdown" role="tabpanel" aria-labelledby="preview-tab" tabindex="0" hidden></div><div class="editor-help">支持 Markdown · Tab 缩进 / Shift+Tab 取消缩进 · Esc 后 Tab 离开编辑区 <button type="button" class="shortcut-help">快捷键</button></div><div class="shortcut-details" hidden>Ctrl / ⌘ + B 加粗 · I 斜体 · K 链接 · E 行内代码 · Shift+P 切换预览 · S 保存。支持粘贴、拖放或选择图片；图片随笔记保存后上传。</div>`;
+  parent.innerHTML = `<div class="editor-toolbar"><div role="tablist" aria-label="正文模式"><button type="button" id="edit-tab" role="tab" aria-selected="true" aria-controls="write-panel">编辑</button><button type="button" id="preview-tab" role="tab" aria-selected="false" aria-controls="preview-panel" tabindex="-1">预览</button></div><div class="format-tools" role="group" aria-label="Markdown 格式"></div></div><div id="write-panel" role="tabpanel" aria-labelledby="edit-tab"></div><div id="preview-panel" class="markdown" role="tabpanel" aria-labelledby="preview-tab" tabindex="0" hidden></div>`;
   const write = parent.querySelector('#write-panel');
   const preview = parent.querySelector('#preview-panel');
   const tools = parent.querySelector('.format-tools');
@@ -224,7 +224,6 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     event.preventDefault(); setMode(event.key === 'Home' ? 'edit' : event.key === 'End' ? 'preview' : mode === 'edit' ? 'preview' : 'edit');
     parent.querySelector(`#${mode}-tab`).focus();
   });
-  parent.querySelector('.shortcut-help').onclick = () => { const help = parent.querySelector('.shortcut-details'); help.hidden = !help.hidden; };
   return {
     getValue: () => view.state.doc.toString(),
     setMode,

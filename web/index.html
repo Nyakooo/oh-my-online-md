@@ -67,7 +67,7 @@
     button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     ::selection { background: var(--accent-soft); color: var(--text); }
     input[type="checkbox"] { accent-color: var(--accent); }
-    .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: min(100%, 1680px); height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
+    .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: 100%; height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
     aside { display: flex; min-width: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
     .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
     .new-note:hover { filter: brightness(.97); }
@@ -109,13 +109,13 @@
     #theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .icon-button:disabled { opacity: .4; cursor: default; }
     .icon-button:disabled:hover { color: var(--muted); background: transparent; }
-    .editor-pane { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 50px clamp(24px, 9vw, 140px) 38px; }
+    .editor-pane { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 30px 36px 38px; }
     .title-input { display: block; width: 100%; margin: 0 0 20px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: clamp(26px, 3.2vw, 35px); font-weight: 650; letter-spacing: -.045em; }
     .title-input::placeholder { color: var(--muted); opacity: .65; }
     [hidden] { display: none !important; }
-    .app[data-loading="true"] [data-note-action],
-    .app[data-loading="true"] .crumb { visibility: hidden; pointer-events: none; }
-    .app[data-loading="true"] #note-list { opacity: .35; pointer-events: none; }
+    .app[data-loading="true"]:not([data-loading-scope="note"]) [data-note-action],
+    .app[data-loading="true"]:not([data-loading-scope="note"]) .crumb { visibility: hidden; pointer-events: none; }
+    .app[data-loading="true"]:not([data-loading-scope="note"]) #note-list { opacity: .35; pointer-events: none; }
 
     #content { min-height: 55vh; }
     .rendered-block { cursor: text; padding: 2px 0; white-space: normal; }
@@ -138,7 +138,7 @@
 
     .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px; background: var(--sidebar); border-radius: 10px 10px 0 0; }
     #content { border: 1px solid var(--line); border-radius: 10px; }
-    .editor-toolbar button, .diagram-tools button, .shortcut-help { border: 0; border-radius: 5px; background: transparent; color: var(--body-text); padding: 7px 9px; font-size: 13px; }
+    .editor-toolbar button, .diagram-tools button { border: 0; border-radius: 5px; background: transparent; color: var(--body-text); padding: 7px 9px; font-size: 13px; }
     .editor-toolbar button:hover, .diagram-tools button:hover { background: var(--hover); }
     .editor-toolbar [aria-selected="true"] { background: var(--paper); color: var(--text); box-shadow: 0 1px 3px #0001; }
     .format-tools { display: flex; flex-wrap: wrap; gap: 2px; margin-left: auto; }
@@ -151,9 +151,6 @@
     .format-tools button:hover::after, .format-tools button:focus-visible::after { opacity: 1; }
     #preview-panel { padding: 20px; min-height: 45vh; }
     .preview-empty { color: var(--muted); }
-    .editor-help, .shortcut-details, .attachment-row { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.7; }
-    .shortcut-help { padding: 0 3px; font-size: inherit; text-decoration: underline; }
-    .attachment-row button { color: var(--accent-text); background: transparent; border: 0; padding: 0; }
     .diagram { border: 1px solid var(--line); border-radius: 8px; margin: 16px 0; overflow: hidden; }
     .diagram-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 4px; background: var(--sidebar); font-size: 12px; }
     .diagram-viewport { overflow: auto; max-height: 70vh; padding: 16px; }
@@ -171,6 +168,13 @@
     @media (max-width: 760px) { .loading-panel { top: 55px; } .format-tools { margin-left: 0; } }
 
     .mobile-menu { display: none; }
+    #sidebar-toggle { flex: none; }
+    #sidebar-toggle svg { width: 19px; height: 19px; }
+    @media (min-width: 761px) {
+      html[data-sidebar-collapsed="true"] .app { grid-template-columns: 64px minmax(0, 1fr); }
+
+      .crumb { margin-right: auto; }
+    }
 
 
     .unsaved-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 13px; padding: 22px; color: var(--text); background: var(--paper); box-shadow: 0 20px 80px #0002; }
@@ -204,6 +208,7 @@
       main { height: 100dvh; }
       .topbar { min-height: 55px; padding: 0 14px; }
       .mobile-menu { display: grid; }
+      #sidebar-toggle { display: none; }
       .crumb { display: none; }
       .actions { gap: 7px; }
       .editor-pane { padding: 34px 24px 50px; }
@@ -250,10 +255,53 @@
     .folder-sort-after { box-shadow:0 2px 0 var(--accent); }
     .folder-row[draggable="true"] { cursor:grab; }
     .folder-lock-now { width:25px; height:28px; flex:none; color:var(--muted); }
+
+    html[data-theme="dark"] { --page:#111; --sidebar:#181916; --paper:#1c1d19; --text:#eeefe6; --body-text:#c8cbbc; --muted:#999d8a; --line:#34362d; --hover:#2b2e24; --accent:#d5c386; --accent-soft:#373324; --accent-text:#e9dca8; }
+    @media (prefers-color-scheme:dark) { html:not([data-theme]) { --page:#111; --sidebar:#181916; --paper:#1c1d19; --text:#eeefe6; --body-text:#c8cbbc; --muted:#999d8a; --line:#34362d; --hover:#2b2e24; --accent:#d5c386; --accent-soft:#373324; --accent-text:#e9dca8; } }
+    .app { transition:grid-template-columns .28s cubic-bezier(.2,.85,.3,1); }
+    .new-note { border-radius:14px; box-shadow:0 2px 0 color-mix(in srgb,var(--accent) 25%,transparent); }
+    .save-button { border-radius:11px; box-shadow:0 2px 0 color-mix(in srgb,var(--accent) 20%,transparent); }
+    .note-item { border-radius:12px; }
+    .note-search { border-radius:12px; }
+    #content { border-radius:18px; }
+    .editor-toolbar { border-radius:17px 17px 0 0; }
+    .editor-toolbar button { border-radius:9px; }
+    .markdown pre { border-radius:12px; }
+    .sidebar-rail { display:none; }
+    .rail-button { display:grid; place-items:center; flex:none; width:44px; height:42px; padding:0; border:0; border-radius:15px; color:var(--muted); background:transparent; transition:background .15s; }
+    .rail-button svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; transition:transform .24s cubic-bezier(.2,1.4,.4,1); }
+    .rail-button:hover { background:var(--hover); }
+    .rail-button:hover svg { transform:scale(1.08); }
+    .rail-button:disabled { opacity:.4; cursor:default; transform:none; }
+    .rail-new { background:var(--accent-soft); color:var(--accent-text); box-shadow:0 3px 0 color-mix(in srgb,var(--accent) 30%,transparent); }
+    .rail-directory.active { background:var(--hover); color:var(--text); }
+    .rail-divider { width:24px; height:1px; background:var(--line); margin:5px 0; }
+    .rail-pin { margin-top:auto; }
+    @media (min-width:761px) {
+      html[data-sidebar-collapsed="true"] .sidebar-rail { display:flex; flex-direction:column; align-items:center; gap:12px; padding:17px 9px; min-height:0; background:var(--sidebar); border-right:1px solid var(--line); }
+      html[data-sidebar-collapsed="true"] #sidebar { position:fixed; z-index:8; left:72px; top:132px; width:274px; max-height:calc(100dvh - 156px); padding:18px 14px; border:1px solid var(--line); border-radius:22px; background:var(--paper); box-shadow:0 18px 50px #302b171c,0 4px 10px #302b1708; opacity:0; visibility:hidden; pointer-events:none; transition:opacity .16s,visibility .16s; }
+      html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar { opacity:1; visibility:visible; pointer-events:auto; transition:opacity .16s; }
+      html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar > * { animation:sidebar-reveal .28s cubic-bezier(.2,1.25,.4,1); }
+      @keyframes sidebar-reveal { from { transform:translateX(-4px); } to { transform:translateX(0); } }
+      html[data-sidebar-collapsed="true"] #sidebar::before { content:""; position:absolute; top:0; bottom:0; left:-12px; width:12px; }
+      html[data-sidebar-collapsed="true"] #sidebar .new-actions { margin-bottom:20px; }
+      html[data-sidebar-collapsed="true"] #sidebar .note-search { margin:0 0 18px; flex:none; }
+      html[data-sidebar-collapsed="true"] #sidebar .folder-root-drop { display:none; }
+      html[data-sidebar-collapsed="true"] #sidebar .note-list { max-height:calc(100dvh - 420px); overflow:auto; }
+      html[data-sidebar-collapsed="true"] #sidebar .server-footer { padding-top:14px; }
+    }
+    @media (prefers-reduced-motion:reduce) { .app,.rail-button,.rail-button svg,html[data-sidebar-collapsed="true"] #sidebar { transition:none; } html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar > * { animation:none; } .rail-button:hover svg { transform:none; } }
   </style>
 </head>
 <body>
   <div class="app" data-loading="true" aria-busy="true">
+    <nav class="sidebar-rail" aria-label="收起的侧栏">
+      <button class="rail-button rail-new" id="rail-new" type="button" data-note-action aria-label="新建笔记" title="新建笔记"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="rail-button" id="rail-search" type="button" data-note-action aria-label="搜索笔记" title="搜索笔记"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+      <span class="rail-divider"></span>
+      <button class="rail-button rail-directory" id="rail-directory" type="button" data-note-action aria-label="笔记目录" aria-controls="sidebar" aria-expanded="false" title="笔记目录"><svg viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v13H3Z"/></svg></button>
+      <button class="rail-button rail-pin" id="rail-expand" type="button" aria-label="固定展开侧栏" title="固定展开侧栏"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m4-11 3 3-3 3"/></svg></button>
+    </nav>
     <aside id="sidebar">
       <div class="new-actions"><button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button><button class="icon-button" id="new-folder" data-note-action title="新建文件夹" aria-label="新建文件夹"></button></div>
       <input class="note-search" id="note-search" type="search" placeholder="搜索全部笔记" aria-label="搜索全部笔记" autocomplete="off">
@@ -263,7 +311,8 @@
     </aside>
     <main>
       <header class="topbar">
-        <button class="icon-button mobile-menu" id="mobile-menu" data-note-action aria-label="笔记列表">☰</button>
+        <button class="icon-button" id="sidebar-toggle" type="button" aria-label="收起侧栏" title="收起侧栏" aria-controls="sidebar" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m6-11-3 3 3 3"/></svg></button>
+        <button class="icon-button mobile-menu" id="mobile-menu" data-note-action aria-label="笔记列表" aria-controls="sidebar" aria-expanded="false">☰</button>
         <div class="crumb">简记 <span>/</span> <span id="crumb-title">新便签</span></div>
         <div class="actions">
           <button class="icon-button" id="share-note" data-note-action type="button" aria-label="分享笔记" title="分享笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/></svg></button>
@@ -277,7 +326,7 @@
       <section class="editor-pane" id="editor-pane" inert aria-busy="true">
         <input class="title-input" id="title" placeholder="笔记标题" maxlength="200" aria-label="笔记标题">
         <div id="content"></div>
-        <div class="attachment-row">拖放或粘贴图片，也可以<button type="button" id="attach-image">选择图片</button>。<input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden></div>
+        <div hidden><button type="button" id="attach-image">选择图片</button><input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden></div>
       </section>
     </main>
   </div>
