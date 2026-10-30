@@ -3,6 +3,27 @@ import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
 import { renderMarkdown } from './markdown.js';
+const toolbarIcons = {
+  "heading": "<path d=\"M6 5v14M18 5v14M6 12h12\"/>",
+  "bold": "<path stroke-width=\"2.4\" d=\"M7 12h6a3.5 3.5 0 0 0 0-7H7v14h7a3.5 3.5 0 0 0 0-7\"/>",
+  "italic": "<path d=\"M10 5h9M5 19h9M15 5 9 19\"/>",
+  "strike": "<path d=\"M17 7c-1-3-10-3-10 1 0 2 3 3 5 4m5 3c1 5-9 6-11 2M3 12h18\"/>",
+  "quote": "<path d=\"M4 7h6v6H4zm10 0h6v6h-6zM10 13c0 3-2 5-5 5m15-5c0 3-2 5-5 5\"/>",
+  "code": "<path d=\"m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16\"/>",
+  "codeblock": "<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"m9 9-3 3 3 3m6-6 3 3-3 3\"/>",
+  "link": "<path d=\"m10 14 4-4m-5 6-2 2a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m2-1 2-2a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0\"/>",
+  "bullet": "<circle cx=\"4\" cy=\"6\" r=\"1\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"4\" cy=\"18\" r=\"1\"/><path d=\"M9 6h12M9 12h12M9 18h12\"/>",
+  "ordered": "<path d=\"m3 4 2-1v6M3 9h4M3 15c0-3 4-3 4-1 0 2-4 3-4 6h4M11 6h10M11 12h10M11 18h10\"/>",
+  "task": "<path d=\"m2 6 2 2 3-4M11 6h10M11 12h10M11 18h10\"/><rect x=\"2\" y=\"15\" width=\"5\" height=\"5\" rx=\"1\"/>",
+  "table": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M3 15h18M10 10v10M16 10v10\"/>",
+  "diagram": "<rect x=\"8\" y=\"2\" width=\"8\" height=\"5\" rx=\"1\"/><rect x=\"2\" y=\"17\" width=\"7\" height=\"5\" rx=\"1\"/><rect x=\"15\" y=\"17\" width=\"7\" height=\"5\" rx=\"1\"/><path d=\"M12 7v5M5.5 17v-5h13v5\"/>",
+  "image": "<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><circle cx=\"8\" cy=\"8\" r=\"1.5\"/><path d=\"m3 17 5-5 4 4 4-6 5 7\"/>",
+  "video": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"m10 8 6 4-6 4Z\"/>"
+};
+function toolbarIcon(name) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${toolbarIcons[name]}</svg>`;
+}
+
 let diagramLoader;
 function loadDiagrams() {
   if (!diagramLoader) diagramLoader = new Promise((resolve, reject) => {
@@ -57,18 +78,20 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     '.cm-selectionBackground': { backgroundColor: 'var(--accent-soft) !important' }
   })];
   const view = new EditorView({ parent: write, state: EditorState.create({ extensions }) });
-  for (const [label, text, before, after, sample, line] of [
-    ['标题', 'H', '## ', '', '标题', true], ['加粗 (Ctrl/⌘ B)', 'B', '**', '**'],
-    ['斜体 (Ctrl/⌘ I)', 'I', '_', '_'], ['删除线', 'S̶', '~~', '~~'],
-    ['引用', '❞', '> ', '', '引用内容', true], ['行内代码 (Ctrl/⌘ E)', '<>', '`', '`', '代码'],
-    ['代码块', '{ }', '\n```\n', '\n```\n', '代码'], ['链接 (Ctrl/⌘ K)', '↗', '[', '](https://)', '链接文字'],
-    ['无序列表', '•', '- ', '', '列表项', true], ['有序列表', '1.', '1. ', '', '列表项', true],
-    ['任务列表', '☑', '- [ ] ', '', '待办事项', true],
-    ['表格', '▦', '\n', '\n', '| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |'],
-    ['Mermaid 图表', '◇', '\n```mermaid\n', '\n```\n', 'flowchart LR\n  A[开始] --> B[完成]']
+  for (const [label, icon, before, after, sample, line] of [
+    ['标题', 'heading', '## ', '', '标题', true], ['加粗 (Ctrl/⌘ B)', 'bold', '**', '**'],
+    ['斜体 (Ctrl/⌘ I)', 'italic', '_', '_'], ['删除线', 'strike', '~~', '~~'],
+    ['引用', 'quote', '> ', '', '引用内容', true], ['行内代码 (Ctrl/⌘ E)', 'code', '`', '`', '代码'],
+    ['代码块', 'codeblock', '\n```\n', '\n```\n', '代码'], ['链接 (Ctrl/⌘ K)', 'link', '[', '](https://)', '链接文字'],
+    ['无序列表', 'bullet', '- ', '', '列表项', true], ['有序列表', 'ordered', '1. ', '', '列表项', true],
+    ['任务列表', 'task', '- [ ] ', '', '待办事项', true],
+    ['表格', 'table', '\n', '\n', '| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |'],
+    ['Mermaid 图表', 'diagram', '\n```mermaid\n', '\n```\n', 'flowchart LR\n  A[开始] --> B[完成]']
   ]) {
     const button = document.createElement('button');
-    button.type = 'button'; button.textContent = text; button.title = label; button.setAttribute('aria-label', label);
+    button.type = 'button'; button.innerHTML = toolbarIcon(icon); button.dataset.tooltip = label;
+    button.setAttribute('aria-label', label);
+    if (['quote', 'link', 'table'].includes(icon)) button.classList.add('tool-group-start');
     button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', () => format(before, after, sample, line)); tools.append(button);
   }
@@ -100,11 +123,22 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     mediaDialog.querySelector('.media-error').hidden = true;
     mediaDialog.showModal();
   }
-  for (const [type, label, icon] of [['img', '图片尺寸', '▧'], ['video', '插入视频', '▷']]) {
+  for (const [type, label, icon] of [['img', '图片尺寸', 'image'], ['video', '插入视频', 'video']]) {
     const button = document.createElement('button');
-    button.type = 'button'; button.title = label; button.setAttribute('aria-label', label); button.textContent = icon;
+    button.type = 'button'; button.setAttribute('aria-label', label); button.innerHTML = toolbarIcon(icon); button.dataset.tooltip = label;
     button.onmousedown = event => event.preventDefault();
     button.onclick = () => openMediaDialog(type); tools.append(button);
+  }
+  for (const button of tools.querySelectorAll('button')) {
+    const positionTooltip = () => {
+      const tooltip = getComputedStyle(button, '::after');
+      const width = parseFloat(tooltip.width) + parseFloat(tooltip.paddingLeft) + parseFloat(tooltip.paddingRight) + 2;
+      const right = button.getBoundingClientRect().right;
+      const shift = Math.max(8 - (right - width), Math.min(0, window.innerWidth - 8 - right));
+      button.style.setProperty('--tooltip-shift', `${shift}px`);
+    };
+    button.addEventListener('mouseenter', positionTooltip);
+    button.addEventListener('focus', positionTooltip);
   }
   mediaDialog.querySelector('.media-cancel').onclick = () => { mediaDialog.close(); view.focus(); };
   mediaForm.onsubmit = event => {
