@@ -4,6 +4,12 @@
 
 ## 未发布
 
+## [v1.4.1] - 2026-10-30
+
+- 网页端和浏览器插件统一使用 15 个 SVG 工具栏图标，并按功能分组。
+- 悬停与键盘聚焦提示即时显示，无延迟和过渡动画。
+- 提示自动避开屏幕边缘，适配深浅主题及窄屏布局。
+
 ## [v1.4.0] - 2026-10-29
 
 - 浏览器插件新增独立离线模式，IndexedDB 保存笔记、图片、文件夹和排序，无需后端服务。
@@ -73,3 +79,5 @@
 [v1.2.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.2.0
 
 [v1.4.0]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.0
+
+[v1.4.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.1
