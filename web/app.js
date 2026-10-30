@@ -467,8 +467,9 @@ $('#note-menu').addEventListener('click', () => { $('#note-menu').hidden = true;
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('#note-menu').hidden = true; });
 const sidebarMedia = window.matchMedia('(max-width: 760px)');
 function isSidebarOpen() {
+  if (sidebarMedia.matches) return document.documentElement.dataset.mobileSidebarOpen === 'true';
   const collapsed = document.documentElement.dataset.sidebarCollapsed;
-  return collapsed ? collapsed === 'false' : !sidebarMedia.matches;
+  return collapsed !== 'true';
 }
 function closeMobileSidebar() {
   if (sidebarMedia.matches) setSidebarOpen(false);
@@ -494,8 +495,13 @@ function syncSidebar() {
   $('#sidebar-toggle svg path').setAttribute('d', open ? 'M9 4v16m6-11-3 3 3 3' : 'M9 4v16m4-11 3 3-3 3');
 }
 function setSidebarOpen(open) {
-  document.documentElement.dataset.sidebarCollapsed = String(!open);
-  try { localStorage.setItem('sidebar-collapsed', String(!open)); } catch {}
+  if (sidebarMedia.matches) {
+    document.documentElement.dataset.mobileSidebarOpen = String(open);
+    try { localStorage.setItem('mobile-sidebar-open', String(open)); } catch {}
+  } else {
+    document.documentElement.dataset.sidebarCollapsed = String(!open);
+    try { localStorage.setItem('sidebar-collapsed', String(!open)); } catch {}
+  }
   syncSidebar();
 }
 for (const id of ['sidebar-toggle', 'mobile-menu']) $(`#${id}`).addEventListener('click', () => setSidebarOpen(!isSidebarOpen()));
@@ -520,8 +526,13 @@ $('#rail-search').onclick = () => { setSidebarPeek(true, true); $('#note-search'
 $('#rail-expand').onclick = () => setSidebarOpen(true);
 document.addEventListener('pointerdown', event => {
   if (!event.target.closest('#sidebar, .sidebar-rail')) setSidebarPeek(false);
+  if (sidebarMedia.matches && isSidebarOpen() && !event.target.closest('#sidebar, #mobile-menu')) setSidebarOpen(false);
 });
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && sidebarMedia.matches && isSidebarOpen() && !event.target.closest('dialog')) {
+    setSidebarOpen(false);
+    $('#mobile-menu').focus();
+  }
   if (event.key === 'Escape' && document.documentElement.dataset.sidebarPeek === 'true') {
     setSidebarPeek(false);
     $('#sidebar-toggle').focus();

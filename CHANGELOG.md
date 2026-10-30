@@ -4,6 +4,14 @@
 
 ## 未发布
 
+## [v1.4.3] - 2026-10-30
+
+- 恢复原深色灰阶配色，修复分享回归的主题检查失败。
+- 分开保存桌面侧栏和手机抽屉状态，修复缩窄窗口时手机菜单意外展开并遮挡菜单按钮的问题。
+- 手机抽屉支持点击外部或按 Esc 关闭。
+- 离开受保护文件夹时立即刷新锁定目录并清除缓存的私密条目。
+- 补充跨布局记忆及手机菜单关闭回归，修复 v1.4.2 的 CI 搜索用例失败。
+
 ## [v1.4.2] - 2026-10-30
 
 - 网页端和插件支持收起侧栏及状态记忆，保留新建、搜索和统一目录入口。
@@ -91,3 +99,5 @@
 [v1.4.1]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.1
 
 [v1.4.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.2
+
+[v1.4.3]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.3

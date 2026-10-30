@@ -55,6 +55,10 @@ async function leaveProtectedFolder(targetFolder, alreadyAllowed = false) {
   if (current && !alreadyAllowed && !await allowLeave()) return false;
   for (const folder of folders) await lockFolderPermissions(folder);
   if (current) resetProtectedEditor(current.name);
+  // Permission changes must invalidate cached private rows even when note navigation reuses the list.
+  const lockedNames = new Set(folders.map(folder => folder.name));
+  state.notes = state.notes.filter(note => !lockedNames.has(note.folder));
+  await searchNotes({ localOnly: true });
   return true;
 }
 async function beforeFolderAccess(folder) {

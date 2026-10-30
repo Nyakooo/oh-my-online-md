@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "简记 · 浏览器笔记",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "离线保存 Markdown 笔记和图片，或连接自己的简记服务器，通过快捷键打开笔记窗口。",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "unlimitedStorage"],

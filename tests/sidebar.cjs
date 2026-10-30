@@ -5,6 +5,14 @@ const assert = require('node:assert/strict');
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     const ready = () => page.waitForFunction(() => !loading);
+    const resize = async (width, height) => {
+      await page.setViewportSize({ width, height });
+      await page.waitForFunction(() => {
+        const open = isSidebarOpen();
+        return document.querySelector('#sidebar').classList.contains('open') === (matchMedia('(max-width: 760px)').matches && open)
+          && document.querySelector('#mobile-menu').getAttribute('aria-expanded') === String(open);
+      });
+    };
     await page.goto(process.env.TEST_URL);
     await ready();
     assert.equal(await page.locator('#sidebar').isVisible(), true);
@@ -36,7 +44,9 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#sidebar').isVisible(), true);
     assert.equal(await page.locator('.editor-help, .shortcut-help, .shortcut-details, .attachment-row').count(), 0);
     assert.equal(await page.locator('#attach-image').isVisible(), false);
-    await page.setViewportSize({ width: 375, height: 800 });
+    await resize(375, 800);
+    assert.equal(await page.locator('#sidebar').isVisible(), false);
+    await page.locator('#mobile-menu').click();
     assert.equal(await page.locator('#sidebar').isVisible(), true);
     await page.reload(); await ready();
     assert.equal(await page.locator('#sidebar').isVisible(), true);
@@ -46,6 +56,19 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#sidebar').isVisible(), false);
     await page.locator('#mobile-menu').click();
     assert.equal(await page.locator('#sidebar').isVisible(), true);
+    await resize(1280, 900);
+    assert.equal(await page.locator('#sidebar').isVisible(), true);
+    await page.locator('#sidebar-toggle').click();
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await resize(375, 800);
+    assert.equal(await page.locator('#sidebar').isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await page.locator('#mobile-menu').click();
+    await page.locator('#title').click({ position: { x: 300, y: 10 } });
+    await page.locator('#sidebar').waitFor({ state: 'hidden' });
+    await resize(1280, 900);
+    assert.equal(await page.locator('#sidebar').isVisible(), false);
     console.log('PASS: icon rail, hover flyout without layout shift, keyboard dismissal, persistence, mobile and hidden hints');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

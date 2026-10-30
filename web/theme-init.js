@@ -7,3 +7,7 @@ try {
   const collapsed = localStorage.getItem('sidebar-collapsed');
   if (collapsed === 'true' || collapsed === 'false') document.documentElement.dataset.sidebarCollapsed = collapsed;
 } catch {}
+
+try {
+  document.documentElement.dataset.mobileSidebarOpen = String(localStorage.getItem('mobile-sidebar-open') === 'true');
+} catch {}
