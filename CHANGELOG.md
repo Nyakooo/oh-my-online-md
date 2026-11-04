@@ -4,6 +4,12 @@
 
 ## 未发布
 
+## [v1.4.4] - 2026-11-04
+
+- 网页端和浏览器插件的 Markdown 工具栏支持滚动吸顶，长文中可随时切换编辑 / 预览及使用格式按钮。
+- 适配手机工具栏换行及正文区域顶部偏移，保持原有主题与布局。
+- 增加网页和插件的吸顶回归，覆盖深浅主题、桌面、手机及滚动至文末。
+
 ## [v1.4.3] - 2026-10-30
 
 - 恢复原深色灰阶配色，修复分享回归的主题检查失败。
@@ -101,3 +107,5 @@
 [v1.4.2]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.2
 
 [v1.4.3]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.3
+
+[v1.4.4]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.4

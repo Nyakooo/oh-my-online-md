@@ -109,7 +109,7 @@
     #theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .icon-button:disabled { opacity: .4; cursor: default; }
     .icon-button:disabled:hover { color: var(--muted); background: transparent; }
-    .editor-pane { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 30px 36px 38px; }
+    .editor-pane { --editor-padding-top: 30px; min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: var(--editor-padding-top) 36px 38px; }
     .title-input { display: block; width: 100%; margin: 0 0 20px; padding: 0; border: 0; outline: 0; color: var(--text); background: transparent; font-size: clamp(26px, 3.2vw, 35px); font-weight: 650; letter-spacing: -.045em; }
     .title-input::placeholder { color: var(--muted); opacity: .65; }
     [hidden] { display: none !important; }
@@ -136,7 +136,7 @@
     .markdown a { color: var(--accent-text); text-decoration: underline; }
     .markdown hr { border: 0; border-top: 1px solid var(--line); }
 
-    .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px; background: var(--sidebar); border-radius: 10px 10px 0 0; }
+    .editor-toolbar { position: sticky; top: calc(0px - var(--editor-padding-top)); z-index: 2; box-shadow: 0 1px 0 var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px; background: var(--sidebar); border-radius: 10px 10px 0 0; }
     #content { border: 1px solid var(--line); border-radius: 10px; }
     .editor-toolbar button, .diagram-tools button { border: 0; border-radius: 5px; background: transparent; color: var(--body-text); padding: 7px 9px; font-size: 13px; }
     .editor-toolbar button:hover, .diagram-tools button:hover { background: var(--hover); }
@@ -211,7 +211,7 @@
       #sidebar-toggle { display: none; }
       .crumb { display: none; }
       .actions { gap: 7px; }
-      .editor-pane { padding: 34px 24px 50px; }
+      .editor-pane { --editor-padding-top: 34px; padding: var(--editor-padding-top) 24px 50px; }
 
     }
     @media (max-width: 390px) { .editor-pane { padding-right: 18px; padding-left: 18px; } }
