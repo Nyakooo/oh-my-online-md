@@ -123,6 +123,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --yes
+          fi
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --title "$RELEASE_TAG · 简记" \

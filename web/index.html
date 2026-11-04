@@ -136,6 +136,7 @@
     .markdown a { color: var(--accent-text); text-decoration: underline; }
     .markdown hr { border: 0; border-top: 1px solid var(--line); }
 
+    .editor-toolbar-anchor { height: 1px; margin-bottom: -1px; pointer-events: none; }
     .editor-toolbar { position: sticky; top: calc(0px - var(--editor-padding-top)); z-index: 2; box-shadow: 0 1px 0 var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px; background: var(--sidebar); border-radius: 10px 10px 0 0; }
     #content { border: 1px solid var(--line); border-radius: 10px; }
     .editor-toolbar button, .diagram-tools button { border: 0; border-radius: 5px; background: transparent; color: var(--body-text); padding: 7px 9px; font-size: 13px; }
@@ -263,6 +264,7 @@
     .note-search { border-radius:12px; }
     #content { border-radius:18px; }
     .editor-toolbar { border-radius:17px 17px 0 0; }
+    .editor-toolbar.is-stuck { border-radius:0; }
     .editor-toolbar button { border-radius:9px; }
     .markdown pre { border-radius:12px; }
     .sidebar-rail { display:none; }

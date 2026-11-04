@@ -39,7 +39,14 @@ function loadDiagrams() {
 window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) {
   const editable = new Compartment();
   let suppressChange = false, canEdit = true, mode = 'edit', revision = 0;
-  parent.innerHTML = `<div class="editor-toolbar"><div role="tablist" aria-label="正文模式"><button type="button" id="edit-tab" role="tab" aria-selected="true" aria-controls="write-panel">编辑</button><button type="button" id="preview-tab" role="tab" aria-selected="false" aria-controls="preview-panel" tabindex="-1">预览</button></div><div class="format-tools" role="group" aria-label="Markdown 格式"></div></div><div id="write-panel" role="tabpanel" aria-labelledby="edit-tab"></div><div id="preview-panel" class="markdown" role="tabpanel" aria-labelledby="preview-tab" tabindex="0" hidden></div>`;
+  parent.innerHTML = `<div class="editor-toolbar-anchor" aria-hidden="true"></div><div class="editor-toolbar"><div role="tablist" aria-label="正文模式"><button type="button" id="edit-tab" role="tab" aria-selected="true" aria-controls="write-panel">编辑</button><button type="button" id="preview-tab" role="tab" aria-selected="false" aria-controls="preview-panel" tabindex="-1">预览</button></div><div class="format-tools" role="group" aria-label="Markdown 格式"></div></div><div id="write-panel" role="tabpanel" aria-labelledby="edit-tab"></div><div id="preview-panel" class="markdown" role="tabpanel" aria-labelledby="preview-tab" tabindex="0" hidden></div>`;
+  const toolbar = parent.querySelector('.editor-toolbar');
+  const scrollPane = parent.closest('.editor-pane');
+  const stickyObserver = new IntersectionObserver(([entry]) => {
+    const stuck = entry.rootBounds && entry.rootBounds.height > 0 && entry.boundingClientRect.top < entry.rootBounds.top;
+    toolbar.classList.toggle('is-stuck', Boolean(stuck));
+  }, { root: scrollPane, threshold: [0, 1] });
+  stickyObserver.observe(parent.querySelector('.editor-toolbar-anchor'));
   const write = parent.querySelector('#write-panel');
   const preview = parent.querySelector('#preview-panel');
   const tools = parent.querySelector('.format-tools');
@@ -257,6 +264,6 @@ window.createNoteEditor = function(parent, { onChange, onPaste, resolveImage }) 
     },
     focus() { setMode('edit'); view.focus(); },
     blur() { view.contentDOM.blur(); },
-    destroy() { revision++; mediaDialog.remove(); view.destroy(); }
+    destroy() { revision++; stickyObserver.disconnect(); mediaDialog.remove(); view.destroy(); }
   };
 };

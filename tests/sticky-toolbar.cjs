@@ -13,9 +13,12 @@ async function check(page, label) {
       if (await page.evaluate(() => isDarkTheme()) !== (theme === 'dark')) await page.locator('#theme-toggle').click();
       for (const mode of ['edit', 'preview']) {
         await page.locator('#' + mode + '-tab').click();
+        await page.locator('#editor-pane').evaluate(el => { el.scrollTop = 0; });
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('.editor-toolbar')).borderTopLeftRadius === '17px');
         for (const scroll of [400, 900, 1500, 'end']) {
           await page.locator('#editor-pane').evaluate((el, scroll) => { el.scrollTop = scroll === 'end' ? el.scrollHeight : scroll; }, scroll);
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          await page.waitForFunction(() => getComputedStyle(document.querySelector('.editor-toolbar')).borderTopLeftRadius === '0px');
           const pane = await page.locator('#editor-pane').boundingBox();
           const toolbar = await page.locator('.editor-toolbar').boundingBox();
           assert.ok(Math.abs(toolbar.y - pane.y) <= 1, `${label} ${width}px ${theme} ${mode}: toolbar must remain at scrollport top, got ${toolbar.y - pane.y}`);
@@ -26,6 +29,8 @@ async function check(page, label) {
         }
         if (theme === 'light' && mode === 'edit') await page.screenshot({ path: `/tmp/online-md-sticky-${label}-${width}.png` });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        await page.locator('#editor-pane').evaluate(el => { el.scrollTop = 0; });
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('.editor-toolbar')).borderTopLeftRadius === '17px');
       }
     }
     await page.locator('#edit-tab').click();
