@@ -4,6 +4,11 @@
 
 ## 未发布
 
+## [v1.4.5] - 2026-11-07
+
+- 重新访问网页或打开浏览器插件时，恢复上次打开的笔记。
+- 网页、插件本地模式和各服务器分别记录打开位置。受保护的笔记在解锁文件夹后恢复。
+
 ## [v1.4.4] - 2026-11-04
 
 - 工具栏吸顶时使用直角，滚回原位后恢复圆角。
@@ -110,3 +115,5 @@
 [v1.4.3]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.3
 
 [v1.4.4]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.4
+
+[v1.4.5]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.5

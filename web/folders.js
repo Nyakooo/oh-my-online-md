@@ -191,7 +191,10 @@ async function editFolder(folder = null) {
       const savedFolder = await api(folder ? folderURL(folder.name) : '/api/folders', folderJSON(folder ? 'PUT' : 'POST', { name, password, keepPassword }));
       const active = folder && state.folder === folder.name;
       if (folderSession.drafts.has(folder?.name)) { const draft = folderSession.drafts.get(folder.name); folderSession.drafts.delete(folder.name); folderSession.drafts.set(name, draft); }
-      if (active) state.folder = name;
+      if (active) {
+        state.folder = name;
+        if (readLastNote()?.id === state.current) rememberCurrentNote();
+      }
       if (active && savedFolder.locked) resetProtectedEditor(name, true);
       if (folder) folderState.expanded.delete(folder.name);
       if (!savedFolder.locked) folderState.expanded.add(name);

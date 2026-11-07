@@ -1,14 +1,22 @@
-const folderSession = { windowID: newFolderWindowID(), epoch: 0, lastActivity: Date.now(), timer: null, drafts: new Map(), lockedFolder: '', busy: false };
+const folderSession = { windowID: newFolderWindowID(), epoch: 0, lastActivity: Date.now(), timer: null, drafts: new Map(), startupNote: null, lockedFolder: '', busy: false };
 window.noteWindowID = folderSession.windowID;
 const FOLDER_IDLE_MS = 5 * 60 * 1000;
 function newFolderWindowID() { return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''); }
 function resetFolderSession() {
   folderSession.epoch++; folderSession.drafts.clear(); folderSession.lockedFolder = '';
+  folderSession.startupNote = null;
   folderSession.windowID = newFolderWindowID(); window.noteWindowID = folderSession.windowID;
   clearTimeout(folderSession.timer); clearNoteAssets();
   $('#folder-locked-panel').hidden = true; $('#editor-pane').hidden = false;
 }
-function showNoteEditor() { $('#folder-locked-panel').hidden = true; $('#editor-pane').hidden = false; folderSession.lockedFolder = ''; }
+function showNoteEditor() { $('#folder-locked-panel').hidden = true; $('#editor-pane').hidden = false; folderSession.lockedFolder = ''; folderSession.startupNote = null; }
+function showLockedFolder(folder, hasDraft = false) {
+  folderSession.lockedFolder = folder;
+  $('#locked-folder-name').textContent = `「${folder}」已锁定`;
+  $('#locked-folder-hint').textContent = hasDraft ? '未保存修改暂存在此窗口内存中，重新解锁后可继续编辑。' : '重新输入密码后继续查看。';
+  $('#folder-locked-panel').hidden = false; $('#editor-pane').hidden = true;
+  $('#share-note').disabled = true; $('#save-note').disabled = true;
+}
 function resetProtectedEditor(folder, preserveDraft = false) {
   const resume = { id: state.current };
   if (preserveDraft && state.dirty) {
@@ -21,15 +29,23 @@ function resetProtectedEditor(folder, preserveDraft = false) {
   state.saved = { title: '', content: '' }; $('#title').value = ''; contentEditor.setValue('', true);
   $('#delete-note').disabled = true; updateFolderCrumb('新便签'); setSavedState('草稿');
   $('#share-dialog').close();
-  if (preserveDraft && resume.id) {
-    folderSession.lockedFolder = folder;
-    $('#locked-folder-name').textContent = `「${folder}」已锁定`;
-    $('#locked-folder-hint').textContent = resume.content !== undefined ? '未保存修改暂存在此窗口内存中，重新解锁后可继续编辑。' : '重新输入密码后继续查看。';
-    $('#folder-locked-panel').hidden = false; $('#editor-pane').hidden = true;
-    $('#share-note').disabled = true; $('#save-note').disabled = true;
-  }
+  if (preserveDraft && resume.id) showLockedFolder(folder, resume.content !== undefined);
 }
 async function restoreFolderDraft(folder) {
+  const startupNote = folderSession.startupNote;
+  if (startupNote?.folder === folder.name) {
+    if (state.notes.some(note => note.id === startupNote.id)) {
+      setLoading(true, '正在加载笔记…', 'note');
+      try { await loadNote(startupNote.id); }
+      finally { setLoading(false); }
+      return;
+    }
+    forgetLastNote(startupNote.id);
+    showNoteEditor();
+    setLoading(false);
+    showNotice('上次打开的笔记已不可用');
+    return;
+  }
   const draft = folderSession.drafts.get(folder.name);
   if (!draft) return;
   if (draft.content === undefined) { await loadNote(draft.id); folderSession.drafts.delete(folder.name); return; }
@@ -99,7 +115,11 @@ function recordFolderActivity() {
 function initFolderSession() {
   $('#unlock-active-folder').onclick = async () => {
     const folder = folderState.items.find(f => f.name === folderSession.lockedFolder);
-    if (folder) { try { await unlockFolderUI(folder); } catch (error) { showNotice(error.message); } }
+    if (!folder || loading) return;
+    try {
+      if (!folder.locked && folderSession.startupNote) await restoreFolderDraft(folder);
+      else await unlockFolderUI(folder);
+    } catch (error) { showNotice(error.message); }
   };
   for (const event of ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart']) document.addEventListener(event, recordFolderActivity, { passive: true });
   window.addEventListener('focus', recordFolderActivity);

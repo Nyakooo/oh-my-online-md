@@ -181,6 +181,12 @@ const path = require('node:path');
       await page.locator('#loading-panel').waitFor({ state: 'hidden' });
       assert.equal(await page.evaluate(async () => (await chrome.storage.local.get('connection')).connection.baseURL), server);
       await page.getByText('旧服务器无法连接，未能远程撤销旧登录；本地凭证已移除，旧会话将在到期后失效。', { exact: true }).waitFor();
+      await page.locator('#folder-locked-panel').waitFor();
+      await page.locator('#unlock-active-folder').click();
+      await page.locator('#folder-password').fill(' 任意密码 ');
+      await page.locator('#folder-confirm').click();
+      await page.locator('#folder-dialog').waitFor({ state: 'hidden' });
+      assert.equal(await page.evaluate(() => state.current), noteID, 'Returning to a server restores its last note after unlocking');
       // Logout must also work locally when remote revocation cannot reach the server.
       await page.route(server + '/api/client/session', route => route.request().method() === 'DELETE' ? route.abort() : route.continue());
     }

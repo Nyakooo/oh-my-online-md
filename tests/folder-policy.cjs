@@ -41,9 +41,12 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#folder-dialog').isVisible(), false, 'same-folder navigation stays unlocked');
     await page.reload(); await page.locator('#loading-panel').waitFor({ state: 'hidden' });
     assert.equal(await privateGroup.locator('.note-item').count(), 0, 'refresh must relock');
+    assert.equal(await page.locator('#folder-locked-panel').isVisible(), true, 'Restoring a private note requires unlocking first');
     const currentRead = async () => page.request.get('/api/notes/' + children[0].id, { headers: { 'X-Note-Window': await page.evaluate(() => folderSession.windowID) } });
     assert.equal((await currentRead()).status(), 403);
-    await unlock(); await childRow(children[0].id).click(); await page.waitForFunction(() => !loading);
+    await unlock();
+    assert.equal(await page.evaluate(() => state.current), children[1].id, 'Unlock restores the last private note');
+    await childRow(children[0].id).click(); await page.waitForFunction(() => !loading);
     await page.locator('#title').fill('自动锁定前未保存');
     await page.locator('.cm-content').evaluate(el => {
       const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1sAAAAASUVORK5CYII='), c => c.charCodeAt(0));

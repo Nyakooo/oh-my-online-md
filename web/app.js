@@ -148,6 +148,19 @@ async function allowLeave() {
   if (choice === 'discard') { state.dirty = false; setSavedState('已保存'); return true; }
   return false;
 }
+function lastNoteKey() {
+  return 'last-opened-note:' + (window.noteHost?.workspaceKey || 'web');
+}
+function readLastNote() {
+  try { return JSON.parse(localStorage.getItem(lastNoteKey())); } catch { return null; }
+}
+function rememberCurrentNote() {
+  try { localStorage.setItem(lastNoteKey(), JSON.stringify({ id: state.current, folder: state.folder })); } catch {}
+}
+function forgetLastNote(id) {
+  if (readLastNote()?.id !== id) return;
+  try { localStorage.removeItem(lastNoteKey()); } catch {}
+}
 async function loadNote(id) {
   const note = await api(`/api/notes/${id}`);
   clearPendingImages();
@@ -165,6 +178,7 @@ async function loadNote(id) {
   updateFolderCrumb(note.title);
   state.dirty = false;
   setSavedState('已保存');
+  rememberCurrentNote();
   if (expandFolder) await searchNotes();
   else for (const button of $('#note-list').querySelectorAll('.note-item')) button.classList.toggle('active', button.dataset.noteId === id);
 }
@@ -260,6 +274,7 @@ async function saveNote() {
     contentEditor.refreshImages();
     updateFolderCrumb(saved.title);
     setSavedState('已保存');
+    rememberCurrentNote();
     if (saved.cleanupWarning) showNotice(saved.cleanupWarning);
     // A sidebar refresh failure must not misreport a successful note save.
     try { await refreshNotes(); } catch { showNotice('笔记已保存，列表刷新失败，请刷新页面'); }
@@ -284,7 +299,9 @@ async function deleteNote() {
   if (loading || !state.current || state.saving || folderState.busy) return;
   const message = state.dirty ? '删除这篇笔记和未保存的修改？此操作无法撤销。' : '删除这篇笔记？此操作无法撤销。';
   if (!confirm(message)) return;
-  await api(`/api/notes/${state.current}`, { method: 'DELETE', headers: state.version ? { 'If-Match': '"' + state.version + '"' } : {} });
+  const id = state.current;
+  await api(`/api/notes/${id}`, { method: 'DELETE', headers: state.version ? { 'If-Match': '"' + state.version + '"' } : {} });
+  forgetLastNote(id);
   clearPendingImages();
   state.current = null;
   state.version = '';
@@ -558,8 +575,15 @@ async function init() {
   try {
     if (window.noteHost && !await window.noteHost.prepare()) return;
     await refreshNotes();
-    if (state.notes.length) await loadNote(state.notes[0].id);
-    else { state.current = null; state.folder = ''; state.version = ''; state.saved = { title: '', content: '' }; state.dirty = false; $('#title').value = ''; contentEditor.setValue('', true); updateFolderCrumb('新便签'); setSavedState('草稿'); }
+    const lastNote = readLastNote();
+    const available = state.notes.find(note => note.id === lastNote?.id);
+    const locked = lastNote?.id && folderState.items.find(folder => folder.name === lastNote.folder && folder.locked);
+    if (available) await loadNote(available.id);
+    else if (locked) {
+      folderSession.startupNote = lastNote;
+      showLockedFolder(locked.name);
+    } else if (state.notes.length) await loadNote(state.notes[0].id);
+    else { showNoteEditor(); state.current = null; state.folder = ''; state.version = ''; state.saved = { title: '', content: '' }; state.dirty = false; $('#title').value = ''; contentEditor.setValue('', true); updateFolderCrumb('新便签'); setSavedState('草稿'); }
     setLoading(false);
   } catch (error) {
     setLoading(true);

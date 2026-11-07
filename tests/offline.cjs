@@ -64,8 +64,12 @@ const path = require('node:path');
     assert.deepEqual(quota, { successful: 19, rejected: 413, remaining: 1 }, '200 MiB aggregate limit preserves existing notes');
 
 
-    await page.reload(); await page.locator('#loading-panel').waitFor({ state: 'hidden' });
-    assert.equal(await page.locator('#title').inputValue(), '离线笔记');
+    const other = await page.evaluate(() => api('/api/notes', { method: 'POST', body: JSON.stringify({ title: '另一篇本地笔记', content: '' }) }));
+    const reopened = await context.newPage();
+    await reopened.goto(url); await reopened.locator('#loading-panel').waitFor({ state: 'hidden' });
+    assert.equal(await reopened.locator('#title').inputValue(), '离线笔记', 'Reopening the extension restores the last visited note');
+    await reopened.close();
+    await page.evaluate(id => api('/api/notes/' + id, { method: 'DELETE' }), other.id);
     await page.locator('#preview-tab').click();
     await page.waitForFunction(() => document.querySelector('#preview-panel img')?.naturalWidth === 1);
     assert.equal(await page.locator('#share-note').isVisible(), false);
@@ -128,6 +132,7 @@ const path = require('node:path');
     const restarted = await context.newPage(); await restarted.goto(url);
     await restarted.locator('#loading-panel').waitFor({ state: 'hidden' });
     assert.equal(await restarted.evaluate(async () => (await api('/api/notes')).length), 2, 'notes survive browser restart');
+    assert.equal(await restarted.evaluate(() => state.current), noteID, 'The last opened note survives browser restart');
     console.log('offline extension: persistence, image, folders, revision conflict, backup and atomic import passed');
   } finally { await context.close(); await fs.rm(profile, { recursive: true, force: true }); }
 })().catch(error => { console.error(error); process.exit(1); });

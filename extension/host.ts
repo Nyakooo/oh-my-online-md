@@ -280,6 +280,7 @@ let initialized = false;
 const host = {
   request, serverURL, assertCurrent,
   get localMode() { return localMode; },
+  get workspaceKey() { return localMode ? 'local' : connection?.baseURL; },
   async prepare() {
     if (!initialized) { initConnectionUI(); initialized = true; }
     if (!modeLoaded) { localMode = (await chrome.storage.local.get('workspaceMode')).workspaceMode === 'local'; modeLoaded = true; }
