@@ -36,6 +36,62 @@ const assert = require('node:assert/strict');
     await page.locator('#sidebar').waitFor({ state: 'hidden' });
     await page.locator('#rail-search').click();
     assert.equal(await page.locator('#note-search').evaluate(el => document.activeElement === el), true);
-    console.log('PASS: single directory entry, hover preview, click latch, shared list/order/actions, outside/Escape close and search focus');
+
+    for (let i = 0; i < 20; i++) {
+      const response = await page.request.post('/api/notes', { data: { title: '滚动笔记 ' + i, content: '正文' } });
+      assert.ok(response.ok());
+    }
+    await page.setViewportSize({ width: 1280, height: 400 });
+    await page.reload();
+    await page.waitForFunction(() => !loading);
+    await page.locator('#rail-directory').click();
+    const list = page.locator('#note-list');
+    assert.ok(await list.evaluate(el => el.clientHeight > 0 && el.scrollHeight > el.clientHeight), 'The collapsed directory has a scrollable list in a short window');
+    await list.hover();
+    await page.mouse.wheel(0, 2000);
+    await page.waitForFunction(() => {
+      const list = document.querySelector('#note-list');
+      return list.scrollTop > 0 && list.lastElementChild.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + 1;
+    });
+    const lastNote = list.locator('.note-item').last();
+    const lastNoteId = await lastNote.getAttribute('data-note-id');
+    await lastNote.click();
+    await page.waitForFunction(id => !loading && state.current === id, lastNoteId);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await list.evaluate(el => { el.scrollTop = 0; });
+    const rootNotes = list.locator(':scope > .note-item');
+    const source = await rootNotes.first().boundingBox();
+    const target = await rootNotes.nth(2).boundingBox();
+    const sourceId = await rootNotes.first().getAttribute('data-note-id');
+    await page.mouse.move(source.x + 30, source.y + source.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x + 30, target.y + target.height * .75, { steps: 12 });
+    await page.mouse.move(target.x + 31, target.y + target.height * .75);
+    await page.waitForFunction(() => document.querySelectorAll('#note-list > .note-item')[2]?.classList.contains('sort-source'));
+    await page.mouse.up();
+    await page.waitForFunction(id => !folderState.busy && document.querySelectorAll('#note-list > .note-item')[2]?.dataset.noteId === id, sourceId);
+    assert.equal(await list.locator('.sort-source').count(), 0);
+    await page.reload();
+    await page.waitForFunction(() => !loading);
+    assert.equal(await rootNotes.nth(2).getAttribute('data-note-id'), sourceId);
+
+    await page.locator('#rail-directory').click();
+    const listBox = await list.boundingBox();
+    const folderRow = list.locator('.folder-row');
+    assert.ok((await folderRow.boundingBox()).y >= listBox.y + listBox.height, 'The destination starts below the visible list');
+    const draggedNote = await rootNotes.first().getAttribute('data-note-id');
+    const dragBox = await rootNotes.first().boundingBox();
+    await page.mouse.move(dragBox.x + 30, dragBox.y + dragBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(listBox.x + 30, listBox.y + listBox.height - 4, { steps: 12 });
+    await page.waitForFunction(() => {
+      const list = document.querySelector('#note-list');
+      return list.querySelector('.folder-row').getBoundingClientRect().bottom < list.getBoundingClientRect().bottom;
+    });
+    const destination = await folderRow.boundingBox();
+    await page.mouse.move(destination.x + 30, destination.y + destination.height / 2);
+    await page.mouse.up();
+    await page.waitForFunction(id => !folderState.busy && state.notes.find(note => note.id === id)?.folder === '汇总目录', draggedNote);
+    console.log('PASS: directory interactions, short-window scrolling, live drag reorder, persisted order, and edge scrolling to an offscreen folder');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

@@ -14,6 +14,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       --page: #f4f4f1;
       --sidebar: #f7f7f4;
+      --sidebar-slide: .24s cubic-bezier(.2,.75,.25,1);
       --paper: #fff;
       --text: #292a27;
       --body-text: #50514b;
@@ -68,7 +69,7 @@
     ::selection { background: var(--accent-soft); color: var(--text); }
     input[type="checkbox"] { accent-color: var(--accent); }
     .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: 100%; height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
-    aside { display: flex; min-width: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
+    aside { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
     .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
     .new-note:hover { filter: brightness(.97); }
     .plus { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--plus-ink); font-size: 16px; line-height: 1; }
@@ -78,7 +79,15 @@
     .note-snippet { font-size: 12px; line-height: 1.6; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
     .note-item mark { color: var(--text); background: var(--accent-soft); }
     .section-label { margin: 0 9px 10px; color: var(--muted); font-size: 12px; font-weight: 550; }
-    .note-list { display: flex; min-height: 0; flex-direction: column; gap: 3px; overflow-y: auto; }
+    .note-list { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 3px; padding-bottom: 24px; overflow-y: auto; }
+    .note-list { --scroll-thumb: color-mix(in srgb, var(--muted) 42%, transparent); }
+    .note-list::-webkit-scrollbar { width: 6px; }
+    .note-list::-webkit-scrollbar-track { background: transparent; }
+    .note-list::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 6px; }
+    .note-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    @supports not selector(::-webkit-scrollbar) {
+      .note-list { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+    }
     .note-item { display: flex; width: 100%; flex-direction: column; gap: 4px; border: 0; border-radius: 9px; padding: 10px 11px; color: var(--body-text); background: transparent; text-align: left; }
     .note-item:hover { background: var(--hover); }
     .note-item.active { color: var(--text); background: var(--hover); }
@@ -204,8 +213,8 @@
     .share-dialog button:disabled { opacity: .5; cursor: default; }
     @media (max-width: 760px) {
       .app { display: block; min-height: 0; }
-      aside { display: none; }
-      aside.open { position: fixed; z-index: 5; inset: 0 auto 0 0; display: flex; width: min(82vw, 310px); box-shadow: 0 0 0 100vmax #0005; }
+      #sidebar { position: fixed; z-index: 5; inset: 0 auto 0 0; width: min(82vw, 310px); transform: translateX(-100%); box-shadow: 0 0 0 100vmax #0000; visibility: hidden; pointer-events: none; transition: transform var(--sidebar-slide), box-shadow .24s, visibility 0s .24s; }
+      #sidebar.open { transform: translateX(0); box-shadow: 0 0 0 100vmax #0005; visibility: visible; pointer-events: auto; transition-delay: 0s; }
       main { height: 100dvh; }
       .topbar { min-height: 55px; padding: 0 14px; }
       .mobile-menu { display: grid; }
@@ -236,10 +245,11 @@
     .folder-symbol .folder-icon { width:19px; height:19px; }
     .folder-toggle>.icon-lock { width:13px; height:13px; color:var(--muted); }
     .folder-settings { width:29px; height:29px; margin-right:3px; flex:none; }
-    .folder-children { border-left:1px solid var(--line); margin:0 0 6px 19px; padding-left:9px; }
+    .folder-children { border-left:1px solid var(--line); margin:0 0 6px 19px; padding:0 0 8px 9px; }
     .folder-empty { padding:10px 5px; color:var(--muted); font-size:11px; }
-    .folder-root-drop { flex:none; margin:16px 0 0; border:1px dashed var(--line); border-radius:8px; padding:12px 5px; text-align:center; color:var(--muted); font-size:11px; }
-    .folder-dropover, .dragging-note .folder-root-drop { background:var(--accent-soft); outline:1px dashed var(--accent); }
+    .note-list.folder-dropover { outline-offset: -1px; }
+    .folder-group.folder-dropover { border-radius: 8px; }
+    .folder-dropover { background:var(--accent-soft); outline:1px dashed var(--accent); }
     .folder-dialog label { display:block; margin:18px 0 7px; color:var(--body-text); font-size:13px; }
     .folder-dialog input:not([type="checkbox"]), .folder-dialog select { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--text); font:inherit; }
     .folder-dialog .folder-check { display:flex; align-items:center; gap:8px; }
@@ -252,8 +262,8 @@
     .folder-locked-panel { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; color:var(--muted); text-align:center; }
     .folder-locked-panel h2 { color:var(--text); font-size:20px; margin:0; }
     .folder-locked-panel p { max-width:400px; font-size:13px; line-height:1.8; margin:0; }
-    .folder-sort-before { box-shadow:0 -2px 0 var(--accent); }
-    .folder-sort-after { box-shadow:0 2px 0 var(--accent); }
+    .note-item.sort-source, .folder-group.sort-source { background: var(--accent-soft); border-radius: 9px; }
+    .note-item.sort-source > *, .folder-group.sort-source > * { opacity: .3; }
     .folder-row[draggable="true"] { cursor:grab; }
     .folder-lock-now { width:25px; height:28px; flex:none; color:var(--muted); }
 
@@ -279,18 +289,14 @@
     .rail-pin { margin-top:auto; }
     @media (min-width:761px) {
       html[data-sidebar-collapsed="true"] .sidebar-rail { display:flex; flex-direction:column; align-items:center; gap:12px; padding:17px 9px; min-height:0; background:var(--sidebar); border-right:1px solid var(--line); }
-      html[data-sidebar-collapsed="true"] #sidebar { position:fixed; z-index:8; left:72px; top:132px; width:274px; max-height:calc(100dvh - 156px); padding:18px 14px; border:1px solid var(--line); border-radius:22px; background:var(--paper); box-shadow:0 18px 50px #302b171c,0 4px 10px #302b1708; opacity:0; visibility:hidden; pointer-events:none; transition:opacity .16s,visibility .16s; }
-      html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar { opacity:1; visibility:visible; pointer-events:auto; transition:opacity .16s; }
-      html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar > * { animation:sidebar-reveal .28s cubic-bezier(.2,1.25,.4,1); }
-      @keyframes sidebar-reveal { from { transform:translateX(-4px); } to { transform:translateX(0); } }
+      html[data-sidebar-collapsed="true"] #sidebar { position:fixed; z-index:8; left:72px; top:132px; width:274px; max-height:calc(100dvh - 156px); padding:18px 14px; border:1px solid var(--line); border-radius:22px; background:var(--paper); box-shadow:0 18px 50px #302b171c,0 4px 10px #302b1708; transform:translateX(-14px); opacity:0; visibility:hidden; pointer-events:none; transition:transform var(--sidebar-slide),opacity .24s,visibility 0s .24s; }
+      html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar { transform:translateX(0); opacity:1; visibility:visible; pointer-events:auto; transition-delay:0s; }
       html[data-sidebar-collapsed="true"] #sidebar::before { content:""; position:absolute; top:0; bottom:0; left:-12px; width:12px; }
       html[data-sidebar-collapsed="true"] #sidebar .new-actions { margin-bottom:20px; }
       html[data-sidebar-collapsed="true"] #sidebar .note-search { margin:0 0 18px; flex:none; }
-      html[data-sidebar-collapsed="true"] #sidebar .folder-root-drop { display:none; }
-      html[data-sidebar-collapsed="true"] #sidebar .note-list { max-height:calc(100dvh - 420px); overflow:auto; }
       html[data-sidebar-collapsed="true"] #sidebar .server-footer { padding-top:14px; }
     }
-    @media (prefers-reduced-motion:reduce) { .app,.rail-button,.rail-button svg,html[data-sidebar-collapsed="true"] #sidebar { transition:none; } html[data-sidebar-collapsed="true"][data-sidebar-peek="true"] #sidebar > * { animation:none; } .rail-button:hover svg { transform:none; } }
+    @media (prefers-reduced-motion:reduce) { .app,.rail-button,.rail-button svg,#sidebar,html[data-sidebar-collapsed="true"] #sidebar { transition:none; } .rail-button:hover svg { transform:none; } }
   </style>
 </head>
 <body>
@@ -306,8 +312,8 @@
       <div class="new-actions"><button class="new-note" id="new-note" data-note-action><span class="plus">+</span><span>新建笔记</span></button><button class="icon-button" id="new-folder" data-note-action title="新建文件夹" aria-label="新建文件夹"></button></div>
       <input class="note-search" id="note-search" type="search" placeholder="搜索全部笔记" aria-label="搜索全部笔记" autocomplete="off">
       <div class="section-label" id="list-label" aria-live="polite">我的笔记</div>
+      <div class="empty-list" id="empty-list" hidden>还没有笔记，点上方按钮记下第一条。</div>
       <div class="note-list" id="note-list"></div>
-      <div class="empty-list" id="empty-list" hidden>还没有笔记，点上方按钮记下第一条。</div><div id="folder-root-drop" class="folder-root-drop">拖到这里，移出文件夹</div>
     </aside>
     <main>
       <header class="topbar">

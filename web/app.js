@@ -498,6 +498,7 @@ function setSidebarPeek(open, pin = false) {
   const peek = open && !sidebarMedia.matches && !isSidebarOpen();
   sidebarPeekPinned = peek && (pin || sidebarPeekPinned);
   if (document.documentElement.dataset.sidebarPeek !== String(peek)) document.documentElement.dataset.sidebarPeek = String(peek);
+  $('#sidebar').inert = !peek && !isSidebarOpen();
   $('#rail-directory').setAttribute('aria-expanded', String(peek));
   $('#rail-directory').classList.toggle('active', peek);
 }

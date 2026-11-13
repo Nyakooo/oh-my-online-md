@@ -74,7 +74,9 @@ function renderFolderList(list, notes, query, makeNote) {
       }
       group.append(inner);
     }
-    bindFolderDrop(row, folder);
+    bindFolderDrop(group, folder, event => !event.target.closest('.note-item')
+      && folderState.drag?.item.dataset.noteId
+      && folderState.drag.parent !== group.querySelector('.folder-children'));
     bindFolderSort(row, folder);
     list.append(group);
   }
@@ -84,17 +86,19 @@ function bindNoteDrag(button, note) {
   button.dataset.noteId = note.id;
   button.addEventListener('dragstart', event => {
     if (loading || state.saving || folderState.busy) { event.preventDefault(); return; }
-    folderState.drag = { kind: 'note', id: note.id, folder: note.folder || '' };
+    startSortDrag(note.id, button);
     event.dataTransfer.setData('application/x-online-md-note', note.id);
     event.dataTransfer.effectAllowed = 'move';
-    document.body.classList.add('dragging-note');
   });
-  button.addEventListener('dragend', clearSortDrag);
+  button.addEventListener('dragend', () => clearSortDrag());
   bindNoteSort(button, note);
 }
-function bindFolderDrop(element, folder) {
+function bindFolderDrop(element, folder, accepts) {
   element.addEventListener('dragover', event => {
-    if (!event.dataTransfer.types.includes('application/x-online-md-note')) return;
+    if (!event.dataTransfer.types.includes('application/x-online-md-note') || !accepts(event)) {
+      element.classList.remove('folder-dropover');
+      return;
+    }
     event.preventDefault(); event.dataTransfer.dropEffect = 'move'; element.classList.add('folder-dropover');
   });
   element.addEventListener('dragleave', event => {
@@ -103,9 +107,9 @@ function bindFolderDrop(element, folder) {
   element.addEventListener('drop', event => {
     element.classList.remove('folder-dropover');
     const id = event.dataTransfer.getData('application/x-online-md-note');
-    if (!id) return;
+    if (!id || !accepts(event)) return;
     event.preventDefault(); event.stopPropagation();
-    document.body.classList.remove('dragging-note');
+    clearSortDrag();
     moveNoteToFolder(id, folder).catch(error => showNotice(error.message));
   });
 }
@@ -242,16 +246,85 @@ async function moveNoteToFolder(id, folder) {
 function initFolderUI() {
   $('#new-folder').innerHTML = folderIcon('folderplus');
   $('#new-folder').onclick = () => editFolder().catch(error => showNotice(error.message));
-  bindFolderDrop($('#folder-root-drop'), null);
+  const list = $('#note-list');
+  bindFolderDrop(list, null, event => event.target === list
+    && folderState.drag?.item.parentElement.matches('.folder-children')
+    && !$('#note-search').value.trim());
+  document.addEventListener('dragover', event => scrollSidebarDuringDrag(list, event));
+  document.addEventListener('dragleave', event => {
+    if (!event.relatedTarget && !list.matches(':hover') && folderState.drag) folderState.drag.scrollSpeed = 0;
+  });
 }
-function clearSortDrag() {
-  folderState.drag = null; document.body.classList.remove('dragging-note');
-  document.querySelectorAll('.folder-dropover,.folder-sort-before,.folder-sort-after').forEach(el => el.classList.remove('folder-dropover', 'folder-sort-before', 'folder-sort-after'));
+function scrollSidebarDuringDrag(list, event) {
+  const drag = folderState.drag;
+  if (!drag) return;
+  const { top, bottom, left, right, height } = list.getBoundingClientRect();
+  const { clientX: x, clientY: y } = event;
+  const edge = Math.min(56, height / 3);
+  drag.scrollSpeed = 0;
+  if (!edge || x < left || x > right || y < top || y > bottom) return;
+  if (y < top + edge) drag.scrollSpeed = -420 * (1 - (y - top) / edge);
+  if (y > bottom - edge) drag.scrollSpeed = 420 * (1 - (bottom - y) / edge);
+  if (!drag.scrollSpeed || drag.scrollFrame) return;
+
+  let previous = performance.now();
+  let remainder = 0;
+  const scroll = now => {
+    drag.scrollFrame = 0;
+    if (!drag.scrollSpeed || folderState.drag !== drag) return;
+    if (drag.scrollSpeed < 0 ? list.scrollTop <= 0 : list.scrollTop >= list.scrollHeight - list.clientHeight - 1) return;
+    const distance = drag.scrollSpeed * Math.min(now - previous, 32) / 1000 + remainder;
+    const pixels = Math.trunc(distance);
+    remainder = distance - pixels;
+    previous = now;
+    list.scrollTop += pixels;
+    drag.scrollFrame = requestAnimationFrame(scroll);
+  };
+  drag.scrollFrame = requestAnimationFrame(scroll);
+}
+function startSortDrag(id, item) {
+  const drag = { id, item, parent: item.parentElement, next: item.nextElementSibling, animations: new Map() };
+  folderState.drag = drag;
+  // Let the browser capture the native drag image before styling the placeholder.
+  requestAnimationFrame(() => {
+    if (folderState.drag === drag) item.classList.add('sort-source');
+  });
+}
+function clearSortDrag(restore = true) {
+  const drag = folderState.drag;
+  folderState.drag = null;
+  if (drag) {
+    cancelAnimationFrame(drag.scrollFrame);
+    for (const animation of drag.animations.values()) animation.cancel();
+    drag.item.classList.remove('sort-source');
+    if (restore === true && drag.item.parentElement === drag.parent && drag.item.nextElementSibling !== drag.next) {
+      drag.parent.insertBefore(drag.item, drag.next);
+    }
+  }
+  document.querySelectorAll('.folder-dropover').forEach(el => el.classList.remove('folder-dropover'));
 }
 function sortDropPosition(element, event) { const box = element.getBoundingClientRect(); return event.clientY < box.top + box.height / 2 ? 'before' : 'after'; }
-function markSortPosition(element, event) {
-  document.querySelectorAll('.folder-sort-before,.folder-sort-after').forEach(el => el.classList.remove('folder-sort-before', 'folder-sort-after'));
-  element.classList.add('folder-sort-' + sortDropPosition(element, event));
+function previewSortPosition(item, event, hitbox = item) {
+  const drag = folderState.drag;
+  if (!drag || item === drag.item || item.parentElement !== drag.parent || $('#note-search').value.trim()) return;
+  if (drag.animations.has(item)) return;
+  const next = sortDropPosition(hitbox, event) === 'before' ? item : item.nextElementSibling;
+  if (next === drag.item || next === drag.item.nextElementSibling) return;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const positions = reduceMotion ? [] : [...drag.parent.children]
+    .filter(peer => peer !== drag.item)
+    .map(peer => [peer, peer.getBoundingClientRect().top]);
+  drag.parent.insertBefore(drag.item, next);
+  for (const [peer, top] of positions) {
+    const previous = drag.animations.get(peer);
+    previous?.cancel();
+    drag.animations.delete(peer);
+    const offset = top - peer.getBoundingClientRect().top;
+    if (!offset) continue;
+    const animation = peer.animate([{ translate: `0 ${offset}px` }, { translate: '0 0' }], { duration: 150, easing: 'ease-out' });
+    drag.animations.set(peer, animation);
+    animation.onfinish = () => drag.animations.delete(peer);
+  }
 }
 async function saveSidebarSort(kind, id, before, folder = '') {
   if ($('#note-search').value.trim()) { showNotice('请清空搜索后调整排序'); return; }
@@ -263,33 +336,48 @@ function bindFolderSort(row, folder) {
   row.draggable = true;
   row.addEventListener('dragstart', event => {
     if (loading || state.saving || folderState.busy || $('#note-search').value.trim()) { event.preventDefault(); return; }
-    folderState.drag = { kind: 'folder', id: folder.name };
+    startSortDrag(folder.name, row.parentElement);
     event.dataTransfer.setData('application/x-online-md-folder', folder.name); event.dataTransfer.effectAllowed = 'move';
   });
-  row.addEventListener('dragend', clearSortDrag);
+  row.addEventListener('dragend', () => clearSortDrag());
   row.addEventListener('dragover', event => {
     if (!event.dataTransfer.types.includes('application/x-online-md-folder')) return;
-    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; markSortPosition(row, event);
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; previewSortPosition(row.parentElement, event, row);
   });
-  row.addEventListener('dragleave', event => { if (!row.contains(event.relatedTarget)) row.classList.remove('folder-sort-before', 'folder-sort-after'); });
   row.addEventListener('drop', event => {
     const id = event.dataTransfer.getData('application/x-online-md-folder'); if (!id) return;
     event.preventDefault(); event.stopPropagation();
-    const names = folderState.items.map(f => f.name).filter(name => name !== id);
-    const index = names.indexOf(folder.name); const before = sortDropPosition(row, event) === 'before' ? folder.name : names[index + 1] || '';
-    clearSortDrag(); if (id !== folder.name) saveSidebarSort('folder', id, before).catch(error => showNotice(error.message));
+    const drag = folderState.drag;
+    if (!drag || drag.id !== id) return;
+    const before = drag.item.nextElementSibling?.dataset.folder || '';
+    const changed = drag.item.nextElementSibling !== drag.next;
+    clearSortDrag(false);
+    if (changed) saveSidebarSort('folder', id, before).catch(async error => {
+      await searchNotes({ localOnly: true });
+      showNotice(error.message);
+    });
   });
 }
 function bindNoteSort(button, note) {
   button.addEventListener('dragover', event => {
-    if (!event.dataTransfer.types.includes('application/x-online-md-note') || folderState.drag?.id === note.id) return;
-    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; markSortPosition(button, event);
+    if (!event.dataTransfer.types.includes('application/x-online-md-note')) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; previewSortPosition(button, event);
   });
-  button.addEventListener('dragleave', event => { if (!button.contains(event.relatedTarget)) button.classList.remove('folder-sort-before', 'folder-sort-after'); });
   button.addEventListener('drop', async event => {
     const id = event.dataTransfer.getData('application/x-online-md-note'); if (!id) return;
     event.preventDefault(); event.stopPropagation();
     const source = state.notes.find(n => n.id === id);
+    const drag = folderState.drag;
+    if (drag?.id === id && drag.parent === button.parentElement && !$('#note-search').value.trim()) {
+      const before = drag.item.nextElementSibling?.dataset.noteId || '';
+      const changed = drag.item.nextElementSibling !== drag.next;
+      clearSortDrag(false);
+      if (changed) {
+        try { await saveSidebarSort('note', id, before, note.folder || ''); }
+        catch (error) { await searchNotes({ localOnly: true }); showNotice(error.message); }
+      }
+      return;
+    }
     const peers = state.notes.filter(n => (n.folder || '') === (note.folder || '') && n.id !== id).map(n => n.id);
     const index = peers.indexOf(note.id); const before = sortDropPosition(button, event) === 'before' ? note.id : peers[index + 1] || '';
     clearSortDrag(); if (!source || id === note.id || loading || state.saving || folderState.busy) return;

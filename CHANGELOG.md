@@ -4,6 +4,12 @@
 
 ## 未发布
 
+## [v1.4.6] - 2026-11-13
+
+- 修复较矮窗口中的侧栏目录滚动，缩细滚动条并为目录浮层和移动端抽屉加入平移动效。
+- 拖拽排序时条目实时让位，靠近列表边缘时自动滚动。
+- 支持把笔记拖入展开文件夹内的空白处，或直接拖回根目录。
+
 ## [v1.4.5] - 2026-11-07
 
 - 重新访问网页或打开浏览器插件时，恢复上次打开的笔记。
@@ -117,3 +123,5 @@
 [v1.4.4]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.4
 
 [v1.4.5]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.5
+
+[v1.4.6]: https://github.com/Nyakooo/oh-my-online-md/releases/tag/v1.4.6

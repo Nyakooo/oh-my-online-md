@@ -33,6 +33,12 @@ const assert = require('node:assert/strict');
     }
     await unlock();
     const privateGroup = page.locator('.folder-group[data-folder="受保护"]');
+    const privateHeader = privateGroup.locator('.folder-row');
+    const headerBox = await privateHeader.boundingBox();
+    await groups.first().locator('.folder-row').dragTo(privateHeader, {
+      targetPosition: { x: 40, y: headerBox.height - 3 }
+    });
+    await page.waitForFunction(() => !folderState.busy && document.querySelector('.folder-group').dataset.folder === '受保护');
     const childRow = id => privateGroup.locator(`[data-note-id="${id}"]`);
     await childRow(children[0].id).dragTo(childRow(children[1].id), { targetPosition: { x: 30, y: 3 } });
     await page.waitForFunction(id => !folderState.busy && document.querySelector('.folder-group[data-folder="受保护"] .note-item').dataset.noteId === id, children[0].id);
@@ -101,7 +107,7 @@ const assert = require('node:assert/strict');
     await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
     const download = page.waitForEvent('download'); await page.getByRole('link', { name: '下载图片', exact: true }).click();
     assert.equal((await download).suggestedFilename(), image.split('/').pop());
-    await childRow(children[0].id).dragTo(page.locator('#folder-root-drop'));
+    await childRow(children[0].id).dragTo(rootRow(roots[0].id), { targetPosition: { x: 30, y: 3 } });
     await page.waitForFunction(() => !folderState.busy && !loading && state.folder === '');
     await page.locator('#preview-tab').click();
     await page.waitForFunction(() => document.querySelector('#preview-panel img')?.src.startsWith('blob:') && document.querySelector('#preview-panel img').naturalWidth === 1);
