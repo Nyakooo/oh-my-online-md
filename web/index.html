@@ -68,7 +68,7 @@
     button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     ::selection { background: var(--accent-soft); color: var(--text); }
     input[type="checkbox"] { accent-color: var(--accent); }
-    .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); width: 100%; height: 100dvh; min-height: 500px; margin: 0 auto; overflow: hidden; background: var(--paper); }
+    .app { display: grid; grid-template-columns: 276px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 100%; height: 100dvh; min-height: 0; margin: 0 auto; overflow: hidden; background: var(--paper); }
     aside { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 25px 17px 16px; background: var(--sidebar); }
     .new-note { display: flex; align-items: center; gap: 10px; width: 100%; margin: 27px 0; padding: 11px 12px; border: 0; border-radius: 10px; color: var(--accent-text); background: var(--accent-soft); text-align: left; font-size: 13px; font-weight: 550; transition: background .15s ease; }
     .new-note:hover { filter: brightness(.97); }
@@ -79,7 +79,8 @@
     .note-snippet { font-size: 12px; line-height: 1.6; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
     .note-item mark { color: var(--text); background: var(--accent-soft); }
     .section-label { margin: 0 9px 10px; color: var(--muted); font-size: 12px; font-weight: 550; }
-    .note-list { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 3px; padding-bottom: 24px; overflow-y: auto; }
+    .note-list { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 3px; padding-bottom: 24px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; }
+    .note-list > * { flex-shrink: 0; }
     .note-list { --scroll-thumb: color-mix(in srgb, var(--muted) 42%, transparent); }
     .note-list::-webkit-scrollbar { width: 6px; }
     .note-list::-webkit-scrollbar-track { background: transparent; }
